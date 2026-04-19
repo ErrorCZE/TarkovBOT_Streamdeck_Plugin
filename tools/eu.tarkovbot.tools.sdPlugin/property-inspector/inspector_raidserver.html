@@ -82,8 +82,8 @@
 
     function autoDetectPath() {
       const btn = document.getElementById('autoDetectBtn');
-      btn.disabled = true;
-      btn.textContent = 'Detecting...';
+      //btn.disabled = true;
+      //btn.textContent = 'Detecting...'; //TODO: FIX FEEDBACK
       streamDeckClient.send('sendToPlugin', {
         command: 'autoDetectPath'
       });

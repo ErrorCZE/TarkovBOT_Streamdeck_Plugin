@@ -1,5 +1,6 @@
 import {
     action,
+    streamDeck,
     SingletonAction,
     WillAppearEvent,
     DidReceiveSettingsEvent,

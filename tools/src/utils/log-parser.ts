@@ -5,7 +5,7 @@ import fs from "fs";
  */
 export function extractTimestamp(folderName: string): number {
 	try {
-		const match = folderName.match(/^log_(\d{4})\.(\d{2})\.(\d{2})_(\d{2})-(\d{2})-(\d{2})/);
+		const match = folderName.match(/^log_(\d{4})\.(\d{2})\.(\d{2})_(\d{1,2})-(\d{1,2})-(\d{1,2})/);
 		if (match) {
 			const [_, year, month, day, hour, minute, second] = match;
 			const date = new Date(

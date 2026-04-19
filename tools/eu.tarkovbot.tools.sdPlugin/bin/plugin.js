@@ -7892,7 +7892,7 @@ class SingletonAction {
 }
 
 let i18n;
-const streamDeck$1 = {
+const streamDeck = {
     /**
      * Namespace for event listeners and functionality relating to Stream Deck actions.
      * @returns Actions namespace.
@@ -8127,10 +8127,10 @@ let TarkovGoonsLocation = (() => {
         }
         async onSendToPlugin(ev) {
             if (ev.payload === 'openWebsite') {
-                streamDeck$1.system.openUrl('https://tarkovbot.eu/stream-deck');
+                streamDeck.system.openUrl('https://tarkovbot.eu/stream-deck');
             }
             if (ev.payload === 'openPatreon') {
-                streamDeck$1.system.openUrl('https://patreon.com/tarkovboteu');
+                streamDeck.system.openUrl('https://patreon.com/tarkovboteu');
             }
         }
     });
@@ -8321,7 +8321,7 @@ function saveSettings(updates) {
  */
 function extractTimestamp(folderName) {
     try {
-        const match = folderName.match(/^log_(\d{4})\.(\d{2})\.(\d{2})_(\d{2})-(\d{2})-(\d{2})/);
+        const match = folderName.match(/^log_(\d{4})\.(\d{2})\.(\d{2})_(\d{1,2})-(\d{1,2})-(\d{1,2})/);
         if (match) {
             const [_, year, month, day, hour, minute, second] = match;
             const date = new Date(parseInt(year), parseInt(month) - 1, parseInt(day), parseInt(hour), parseInt(minute), parseInt(second));
@@ -8486,11 +8486,11 @@ async function refreshData(mode) {
                 };
             });
             globalThis[`locationsData${mode}`] = locationsData;
-            streamDeck$1.logger.info(`Processed ${mode} Map Data`);
+            streamDeck.logger.info(`Processed ${mode} Map Data`);
         }
     }
     catch (error) {
-        streamDeck$1.logger.error(`Error fetching ${mode} data:`, error);
+        streamDeck.logger.error(`Error fetching ${mode} data:`, error);
     }
 }
 function isApiResponse(data) {
@@ -8504,11 +8504,11 @@ async function refreshLocalMapNames() {
         const jsonData = await response.json();
         if (isLocalMapNamesArray(jsonData)) {
             localMapNames = jsonData;
-            streamDeck$1.logger.info("Local map names loaded successfully");
+            streamDeck.logger.info("Local map names loaded successfully");
         }
     }
     catch (error) {
-        streamDeck$1.logger.error("Error fetching local map names:", error);
+        streamDeck.logger.error("Error fetching local map names:", error);
     }
 }
 function isLocalMapNamesArray(data) {
@@ -8542,7 +8542,7 @@ let TarkovCurrentMapInfo = (() => {
         }
         async onKeyDown(ev) {
             const eftInstallPath = ev.payload.settings.eft_install_path;
-            streamDeck$1.logger.info("Payload settings on keydown: " + JSON.stringify(ev.payload.settings));
+            streamDeck.logger.info("Payload settings on keydown: " + JSON.stringify(ev.payload.settings));
             if (intervalUpdateInterval$6) {
                 clearInterval(intervalUpdateInterval$6);
                 intervalUpdateInterval$6 = null;
@@ -8551,18 +8551,18 @@ let TarkovCurrentMapInfo = (() => {
             if (ev.payload.settings.map_autoupdate_check) {
                 intervalUpdateInterval$6 = setInterval(async () => {
                     globalThis.location = await this.getLatestMap(eftInstallPath);
-                    streamDeck$1.logger.info("Auto-update interval triggered; location:", globalThis.location);
+                    streamDeck.logger.info("Auto-update interval triggered; location:", globalThis.location);
                 }, 3000);
             }
             else {
-                streamDeck$1.logger.info("Auto-update disabled; location:", globalThis.location);
+                streamDeck.logger.info("Auto-update disabled; location:", globalThis.location);
             }
             if (globalThis.location) {
-                streamDeck$1.profiles.switchToProfile(ev.action.device.id, await this.getProfilePath(ev.action.device.type));
+                streamDeck.profiles.switchToProfile(ev.action.device.id, await this.getProfilePath(ev.action.device.type));
             }
             else {
                 ev.action.setTitle("Not Found");
-                streamDeck$1.logger.info("Map not found; returned value:", globalThis.location);
+                streamDeck.logger.info("Map not found; returned value:", globalThis.location);
             }
         }
         async getLatestMap(eftPath) {
@@ -8570,7 +8570,7 @@ let TarkovCurrentMapInfo = (() => {
                 const settings = loadSettings();
                 const pveMode = settings.pve_map_mode_check;
                 const logsPath = `${eftPath}\\Logs`;
-                streamDeck$1.logger.info("Using logs path:", logsPath);
+                streamDeck.logger.info("Using logs path:", logsPath);
                 const folders = await fs$1.promises.readdir(logsPath, { withFileTypes: true });
                 const logFolders = folders
                     .filter(f => f.isDirectory() && f.name.startsWith("log_"))
@@ -8581,21 +8581,21 @@ let TarkovCurrentMapInfo = (() => {
                     .sort((a, b) => b.timestamp - a.timestamp)
                     .map(f => f.dirent);
                 if (logFolders.length === 0) {
-                    streamDeck$1.logger.info("No log folders found");
+                    streamDeck.logger.info("No log folders found");
                     return null;
                 }
                 const latestFolder = `${logsPath}\\${logFolders[0].name}`;
-                streamDeck$1.logger.info("Checking latest log folder:", latestFolder);
+                streamDeck.logger.info("Checking latest log folder:", latestFolder);
                 const files = await fs$1.promises.readdir(latestFolder, { withFileTypes: true });
                 const logFiles = files
                     .filter(f => f.isFile() && f.name.includes("application") && f.name.endsWith(".log"))
                     .sort((a, b) => b.name.localeCompare(a.name));
                 if (logFiles.length === 0) {
-                    streamDeck$1.logger.info("No log files found in folder:", latestFolder);
+                    streamDeck.logger.info("No log files found in folder:", latestFolder);
                     return null;
                 }
                 const latestFile = `${latestFolder}\\${logFiles[0].name}`;
-                streamDeck$1.logger.info("Reading latest log file:", latestFile);
+                streamDeck.logger.info("Reading latest log file:", latestFile);
                 const content = await fs$1.promises.readFile(latestFile, "utf-8");
                 const lines = content.split("\n");
                 // Check based on pve_map_mode_check setting
@@ -8606,7 +8606,7 @@ let TarkovCurrentMapInfo = (() => {
                         const sceneMatch = lines[i].match(/rcid:([\w_]+)\.ScenesPreset\.asset/i);
                         if (sceneMatch) {
                             const mapName = sceneMatch[1].toLowerCase();
-                            streamDeck$1.logger.info("Map name from scene:", mapName);
+                            streamDeck.logger.info("Map name from scene:", mapName);
                             latestMapName = mapName;
                             // Only process the last map found - exit after first match when reading backward
                             break;
@@ -8618,11 +8618,11 @@ let TarkovCurrentMapInfo = (() => {
                             for (const mapEntry of localMapNames) {
                                 const localIDsLowercase = mapEntry.localIDs.map(id => id.toLowerCase());
                                 if (localIDsLowercase.includes(latestMapName)) {
-                                    streamDeck$1.logger.info("Map location found (PVE mode):", mapEntry.dataID);
+                                    streamDeck.logger.info("Map location found (PVE mode):", mapEntry.dataID);
                                     return mapEntry.dataID;
                                 }
                             }
-                            streamDeck$1.logger.info("No matching dataID found for map:", latestMapName);
+                            streamDeck.logger.info("No matching dataID found for map:", latestMapName);
                         }
                         // If we couldn't map it, just return the map name we found
                         return latestMapName;
@@ -8633,16 +8633,16 @@ let TarkovCurrentMapInfo = (() => {
                     for (let i = lines.length - 1; i >= 0; i--) {
                         const match = lines[i].match(/Location:\s(\w+),/);
                         if (match) {
-                            streamDeck$1.logger.info("Map location found:", match[1]);
+                            streamDeck.logger.info("Map location found:", match[1]);
                             return match[1];
                         }
                     }
                 }
-                streamDeck$1.logger.info("No location found in latest file:", latestFile);
+                streamDeck.logger.info("No location found in latest file:", latestFile);
                 return null;
             }
             catch (error) {
-                streamDeck$1.logger.error("Error reading logs:", error);
+                streamDeck.logger.error("Error reading logs:", error);
                 return null;
             }
         }
@@ -8669,7 +8669,7 @@ let TarkovCurrentMapInfo = (() => {
             globalThis.pve_map_mode_check = pve_map_mode_check;
             globalThis.eftInstallPath = eft_install_path;
             globalThis.map_autoupdate_check = map_autoupdate_check;
-            streamDeck$1.logger.info("Received settings:", ev.payload.settings);
+            streamDeck.logger.info("Received settings:", ev.payload.settings);
             const updatedData = {
                 global: {
                     eft_install_path,
@@ -8683,14 +8683,14 @@ let TarkovCurrentMapInfo = (() => {
         }
         async onSendToPlugin(ev) {
             const payload = ev.payload;
-            streamDeck$1.logger.info("onSendToPlugin received:", JSON.stringify(payload));
+            streamDeck.logger.info("onSendToPlugin received:", JSON.stringify(payload));
             if (ev.payload === 'openPatreon') {
-                streamDeck$1.system.openUrl('https://patreon.com/tarkovboteu');
+                streamDeck.system.openUrl('https://patreon.com/tarkovboteu');
             }
             if (payload.command === "autoDetectPath") {
-                streamDeck$1.logger.info("Starting auto-detect path...");
+                streamDeck.logger.info("Starting auto-detect path...");
                 const result = await detectEftPath();
-                streamDeck$1.logger.info("Auto-detect result:", JSON.stringify(result));
+                streamDeck.logger.info("Auto-detect result:", JSON.stringify(result));
                 if (result.success && result.path) {
                     // Update the action settings with the detected path
                     await ev.action.setSettings({
@@ -8702,7 +8702,7 @@ let TarkovCurrentMapInfo = (() => {
                         global: { eft_install_path: result.path }
                     });
                     // Send success response back to property inspector
-                    await streamDeck$1.ui.current?.sendToPropertyInspector({
+                    await streamDeck.ui.current?.sendToPropertyInspector({
                         event: "autoDetectResult",
                         success: true,
                         path: result.path
@@ -8710,7 +8710,7 @@ let TarkovCurrentMapInfo = (() => {
                 }
                 else {
                     // Send error response
-                    await streamDeck$1.ui.current?.sendToPropertyInspector({
+                    await streamDeck.ui.current?.sendToPropertyInspector({
                         event: "autoDetectResult",
                         success: false,
                         error: result.error
@@ -8719,8 +8719,8 @@ let TarkovCurrentMapInfo = (() => {
             }
             else if (payload.command === "getGlobalSettings") {
                 const settings = loadSettings();
-                streamDeck$1.logger.info("Sending global settings:", settings.eftInstallPath);
-                await streamDeck$1.ui.current?.sendToPropertyInspector({
+                streamDeck.logger.info("Sending global settings:", settings.eftInstallPath);
+                await streamDeck.ui.current?.sendToPropertyInspector({
                     event: "globalSettings",
                     eft_install_path: settings.eftInstallPath
                 });
@@ -8761,7 +8761,7 @@ let TarkovCurrentMapInfo_Name = (() => {
             __runInitializers(_classThis, _classExtraInitializers);
         }
         async onWillAppear(ev) {
-            streamDeck$1.logger.info("Action will appear");
+            streamDeck.logger.info("Action will appear");
             this.updateMapName(ev);
             if (intervalUpdateInterval$5) {
                 clearInterval(intervalUpdateInterval$5);
@@ -8769,12 +8769,12 @@ let TarkovCurrentMapInfo_Name = (() => {
             }
             const settings = loadSettings();
             if (settings.map_autoupdate_check) {
-                streamDeck$1.logger.info("Starting auto-update interval for map name");
+                streamDeck.logger.info("Starting auto-update interval for map name");
                 intervalUpdateInterval$5 = setInterval(() => this.updateMapName(ev), 5000);
             }
         }
         onWillDisappear(ev) {
-            streamDeck$1.logger.info("Action will disappear");
+            streamDeck.logger.info("Action will disappear");
             if (intervalUpdateInterval$5) {
                 clearInterval(intervalUpdateInterval$5);
                 intervalUpdateInterval$5 = null;
@@ -8782,27 +8782,27 @@ let TarkovCurrentMapInfo_Name = (() => {
         }
         updateMapName(ev) {
             const settings = loadSettings();
-            streamDeck$1.logger.info("updateMapName called");
+            streamDeck.logger.info("updateMapName called");
             const locationId = globalThis.location;
-            streamDeck$1.logger.info(`Current Location ID: ${locationId}`);
+            streamDeck.logger.info(`Current Location ID: ${locationId}`);
             ev.action.setTitle("");
             if (locationId) {
-                streamDeck$1.logger.info("Fetching map data...");
+                streamDeck.logger.info("Fetching map data...");
                 const mapData = getMapData(locationId, settings.pve_map_mode_check);
-                streamDeck$1.logger.info(`Map Mode: ${settings.pve_map_mode_check ? 'PvE' : 'PvP'}`);
-                streamDeck$1.logger.info(`Found Map Data: ${mapData ? JSON.stringify(mapData) : 'No map data'}`);
+                streamDeck.logger.info(`Map Mode: ${settings.pve_map_mode_check ? 'PvE' : 'PvP'}`);
+                streamDeck.logger.info(`Found Map Data: ${mapData ? JSON.stringify(mapData) : 'No map data'}`);
                 if (mapData) {
                     const formattedName = `\n${mapData.name.replace(/ /g, "\n")}`;
-                    streamDeck$1.logger.info(`Setting title: ${formattedName}`);
+                    streamDeck.logger.info(`Setting title: ${formattedName}`);
                     ev.action.setTitle(formattedName);
                 }
                 else {
-                    streamDeck$1.logger.info("No map data found, setting default title");
+                    streamDeck.logger.info("No map data found, setting default title");
                     ev.action.setTitle("\nNo Map\nData");
                 }
             }
             else {
-                streamDeck$1.logger.info("Unknown location, setting default title");
+                streamDeck.logger.info("Unknown location, setting default title");
                 ev.action.setTitle("\nUnknown\nLocation");
             }
         }
@@ -8937,7 +8937,7 @@ let TarkovCurrentMapInfo_BackToProfile = (() => {
             ev.action.setTitle("Back");
         }
         async onKeyDown(ev) {
-            streamDeck$1.profiles.switchToProfile(ev.action.device.id, undefined);
+            streamDeck.profiles.switchToProfile(ev.action.device.id, undefined);
         }
     });
     return _classThis;
@@ -9053,11 +9053,11 @@ async function refreshDatacenterData() {
         if (jsonData && typeof jsonData === "object") {
             datacenterData = jsonData;
             globalThis.datacentersData = datacenterData;
-            streamDeck$1.logger.info("Datacenter list updated.");
+            streamDeck.logger.info("Datacenter list updated.");
         }
     }
     catch (error) {
-        streamDeck$1.logger.error("Error fetching datacenter data:", error);
+        streamDeck.logger.error("Error fetching datacenter data:", error);
     }
 }
 refreshDatacenterData();
@@ -9115,7 +9115,7 @@ let TarkovCurrentServerInfo = (() => {
             const { eft_install_path, raid_autoupdate_check } = ev.payload.settings;
             globalThis.eftInstallPath = eft_install_path;
             globalThis.raid_autoupdate_check = raid_autoupdate_check;
-            streamDeck$1.logger.info("Received settings:", ev.payload.settings);
+            streamDeck.logger.info("Received settings:", ev.payload.settings);
             const updatedData = {
                 global: {
                     eft_install_path,
@@ -9134,14 +9134,14 @@ let TarkovCurrentServerInfo = (() => {
         }
         async onSendToPlugin(ev) {
             const payload = ev.payload;
-            streamDeck$1.logger.info("onSendToPlugin received:", JSON.stringify(payload));
+            streamDeck.logger.info("onSendToPlugin received:", JSON.stringify(payload));
             if (ev.payload === 'openPatreon') {
-                streamDeck$1.system.openUrl('https://patreon.com/tarkovboteu');
+                streamDeck.system.openUrl('https://patreon.com/tarkovboteu');
             }
             if (payload.command === "autoDetectPath") {
-                streamDeck$1.logger.info("Starting auto-detect path...");
+                streamDeck.logger.info("Starting auto-detect path...");
                 const result = await detectEftPath();
-                streamDeck$1.logger.info("Auto-detect result:", JSON.stringify(result));
+                streamDeck.logger.info("Auto-detect result:", JSON.stringify(result));
                 if (result.success && result.path) {
                     // Update the action settings with the detected path
                     await ev.action.setSettings({
@@ -9153,7 +9153,7 @@ let TarkovCurrentServerInfo = (() => {
                         global: { eft_install_path: result.path }
                     });
                     // Send success response back to property inspector
-                    await streamDeck$1.ui.current?.sendToPropertyInspector({
+                    await streamDeck.ui.current?.sendToPropertyInspector({
                         event: "autoDetectResult",
                         success: true,
                         path: result.path
@@ -9161,7 +9161,7 @@ let TarkovCurrentServerInfo = (() => {
                 }
                 else {
                     // Send error response
-                    await streamDeck$1.ui.current?.sendToPropertyInspector({
+                    await streamDeck.ui.current?.sendToPropertyInspector({
                         event: "autoDetectResult",
                         success: false,
                         error: result.error
@@ -9170,8 +9170,8 @@ let TarkovCurrentServerInfo = (() => {
             }
             else if (payload.command === "getGlobalSettings") {
                 const settings = loadSettings();
-                streamDeck$1.logger.info("Sending global settings:", settings.eftInstallPath);
-                await streamDeck$1.ui.current?.sendToPropertyInspector({
+                streamDeck.logger.info("Sending global settings:", settings.eftInstallPath);
+                await streamDeck.ui.current?.sendToPropertyInspector({
                     event: "globalSettings",
                     eft_install_path: settings.eftInstallPath
                 });
@@ -9308,7 +9308,7 @@ let TarkovCurrentMapInfo_Boss = (() => {
                         }
                     }
                     catch (error) {
-                        streamDeck$1.logger.error(`Error fetching boss image for ${boss.id}:`, error);
+                        streamDeck.logger.error(`Error fetching boss image for ${boss.id}:`, error);
                     }
                 }
                 if (bossImageCache[boss.id]) {
@@ -9334,7 +9334,7 @@ let TarkovCurrentMapInfo_Boss = (() => {
                 return `data:image/webp;base64,${Buffer.from(arrayBuffer).toString("base64")}`;
             }
             catch (error) {
-                streamDeck$1.logger.error("Failed to fetch image:", error);
+                streamDeck.logger.error("Failed to fetch image:", error);
                 return null;
             }
         }
@@ -9682,31 +9682,31 @@ let TarkovCurrentMapInfo_Boss_Sixteenth = (() => {
 /*
 streamDeck.logger.setLevel("trace");
 */
-streamDeck$1.actions.registerAction(new TarkovTime());
-streamDeck$1.actions.registerAction(new TarkovGoonsLocation());
-streamDeck$1.actions.registerAction(new TarkovTraderRestock());
-streamDeck$1.actions.registerAction(new TarkovCurrentMapInfo());
-streamDeck$1.actions.registerAction(new TarkovCurrentMapInfo_Name());
-streamDeck$1.actions.registerAction(new TarkovCurrentMapInfo_Duration());
-streamDeck$1.actions.registerAction(new TarkovCurrentMapInfo_Players());
-streamDeck$1.actions.registerAction(new TarkovCurrentMapInfo_Boss_First());
-streamDeck$1.actions.registerAction(new TarkovCurrentMapInfo_Boss_Second());
-streamDeck$1.actions.registerAction(new TarkovCurrentMapInfo_Boss_Third());
-streamDeck$1.actions.registerAction(new TarkovCurrentMapInfo_Boss_Fourth());
-streamDeck$1.actions.registerAction(new TarkovCurrentMapInfo_Boss_Fifth());
-streamDeck$1.actions.registerAction(new TarkovCurrentMapInfo_Boss_Sixth());
-streamDeck$1.actions.registerAction(new TarkovCurrentMapInfo_Boss_Seventh());
-streamDeck$1.actions.registerAction(new TarkovCurrentMapInfo_Boss_Eighth());
-streamDeck$1.actions.registerAction(new TarkovCurrentMapInfo_Boss_Ninth());
-streamDeck$1.actions.registerAction(new TarkovCurrentMapInfo_Boss_Tenth());
-streamDeck$1.actions.registerAction(new TarkovCurrentMapInfo_Boss_Eleventh());
-streamDeck$1.actions.registerAction(new TarkovCurrentMapInfo_Boss_Twelfth());
-streamDeck$1.actions.registerAction(new TarkovCurrentMapInfo_Boss_Thirteenth());
-streamDeck$1.actions.registerAction(new TarkovCurrentMapInfo_Boss_Fourteenth());
-streamDeck$1.actions.registerAction(new TarkovCurrentMapInfo_Boss_Fifteenth());
-streamDeck$1.actions.registerAction(new TarkovCurrentMapInfo_Boss_Sixteenth());
-streamDeck$1.actions.registerAction(new TarkovCurrentMapInfo_CurrentServer());
-streamDeck$1.actions.registerAction(new TarkovCurrentMapInfo_BackToProfile());
-streamDeck$1.actions.registerAction(new TarkovCurrentServerInfo());
-streamDeck$1.connect();
+streamDeck.actions.registerAction(new TarkovTime());
+streamDeck.actions.registerAction(new TarkovGoonsLocation());
+streamDeck.actions.registerAction(new TarkovTraderRestock());
+streamDeck.actions.registerAction(new TarkovCurrentMapInfo());
+streamDeck.actions.registerAction(new TarkovCurrentMapInfo_Name());
+streamDeck.actions.registerAction(new TarkovCurrentMapInfo_Duration());
+streamDeck.actions.registerAction(new TarkovCurrentMapInfo_Players());
+streamDeck.actions.registerAction(new TarkovCurrentMapInfo_Boss_First());
+streamDeck.actions.registerAction(new TarkovCurrentMapInfo_Boss_Second());
+streamDeck.actions.registerAction(new TarkovCurrentMapInfo_Boss_Third());
+streamDeck.actions.registerAction(new TarkovCurrentMapInfo_Boss_Fourth());
+streamDeck.actions.registerAction(new TarkovCurrentMapInfo_Boss_Fifth());
+streamDeck.actions.registerAction(new TarkovCurrentMapInfo_Boss_Sixth());
+streamDeck.actions.registerAction(new TarkovCurrentMapInfo_Boss_Seventh());
+streamDeck.actions.registerAction(new TarkovCurrentMapInfo_Boss_Eighth());
+streamDeck.actions.registerAction(new TarkovCurrentMapInfo_Boss_Ninth());
+streamDeck.actions.registerAction(new TarkovCurrentMapInfo_Boss_Tenth());
+streamDeck.actions.registerAction(new TarkovCurrentMapInfo_Boss_Eleventh());
+streamDeck.actions.registerAction(new TarkovCurrentMapInfo_Boss_Twelfth());
+streamDeck.actions.registerAction(new TarkovCurrentMapInfo_Boss_Thirteenth());
+streamDeck.actions.registerAction(new TarkovCurrentMapInfo_Boss_Fourteenth());
+streamDeck.actions.registerAction(new TarkovCurrentMapInfo_Boss_Fifteenth());
+streamDeck.actions.registerAction(new TarkovCurrentMapInfo_Boss_Sixteenth());
+streamDeck.actions.registerAction(new TarkovCurrentMapInfo_CurrentServer());
+streamDeck.actions.registerAction(new TarkovCurrentMapInfo_BackToProfile());
+streamDeck.actions.registerAction(new TarkovCurrentServerInfo());
+streamDeck.connect();
 //# sourceMappingURL=plugin.js.map
