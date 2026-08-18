@@ -1,161 +1,136 @@
 import {
-    streamDeck,
     action,
+    streamDeck,
+    DidReceiveSettingsEvent,
+    KeyDownEvent,
+    SendToPluginEvent,
     SingletonAction,
     WillAppearEvent,
-    KeyDownEvent,
-    DidReceiveSettingsEvent,
     WillDisappearEvent,
-    SendToPluginEvent,
 } from "@elgato/streamdeck";
-import fs from "fs";
-import path from "path";
-import { saveSettings, loadSettings } from "../utils/settings";
-import { extractTimestamp, findServerFromLogs } from "../utils/log-parser";
-import { detectEftPath } from "../utils/eft-path";
+import type { JsonValue, JsonObject } from "@elgato/utils";
+import { INTERVALS } from "../config/constants";
+import { handleCommonCommands } from "./base/command-handler";
+import { settingsService } from "../services/settings-service";
+import { findServerFromLogs } from "../services/log-service";
+import { formatDatacenter } from "../utils/time-format";
+import type { RaidServerSettings } from "../types";
 
-
-let eftInstallPath: any;
-let currentServerInfo: any;
-let intervalUpdateInterval: any;
-
-
-const datacenterAPI = "https://tarkovbot.eu/api/streamdeck/v2/eft-datacenters";
-let datacenterData: Record<string, { datacenter: string; sids: string[] }[]> = {};
-
-async function refreshDatacenterData(): Promise<void> {
-    try {
-        const response = await fetch(datacenterAPI);
-        const jsonData = await response.json();
-
-        if (jsonData && typeof jsonData === "object") {
-            datacenterData = jsonData as Record<string, { datacenter: string; sids: string[] }[]>;
-            globalThis.datacentersData = datacenterData;
-            streamDeck.logger.info("Datacenter list updated.");
-        }
-    } catch (error) {
-        streamDeck.logger.error("Error fetching datacenter data:", error);
-    }
-}
-
-refreshDatacenterData();
-setInterval(refreshDatacenterData, 3600000);
-
-
-
+const DEFAULT_TITLE = `Get\nCurrent\nServer`;
+const LOADING_TITLE = `Loading...`;
+const NO_SERVER_TITLE = `No\nServer\nFound`;
 
 @action({ UUID: "eu.tarkovbot.tools.raidserver" })
 export class TarkovCurrentServerInfo extends SingletonAction {
+    private timers = new Map<string, NodeJS.Timeout>();
+    private generations = new Map<string, number>();
 
-    override async onWillAppear(ev: WillAppearEvent): Promise<void> {
-        ev.action.setTitle(`Get\nCurrent\nServer`);
+    override async onWillAppear(ev: WillAppearEvent<RaidServerSettings>): Promise<void> {
+        await this.maybeInheritFromGlobal(ev.action, ev.payload.settings ?? ({} as RaidServerSettings));
+        ev.action.setTitle(DEFAULT_TITLE);
     }
 
-    override async onKeyDown(ev: KeyDownEvent): Promise<void> {
-        ev.action.setTitle(`Loading...`);
-        const { eft_install_path, raid_autoupdate_check } = ev.payload.settings;
+    override async onKeyDown(ev: KeyDownEvent<RaidServerSettings>): Promise<void> {
+        const actionId = ev.action.id;
+        this.stopTimer(actionId);
+        const gen = this.bumpGen(actionId);
 
-        if (intervalUpdateInterval) {
-            clearInterval(intervalUpdateInterval);
-            intervalUpdateInterval = null;
-        }
+        ev.action.setTitle(LOADING_TITLE);
+        const settings = settingsService.load();
+        const actionSettings = ev.payload.settings ?? ({} as RaidServerSettings);
+        const eftInstallPath =
+            settings.eftInstallPath || actionSettings.eft_install_path || "";
+        const raidAutoUpdate = !!(actionSettings.raid_autoupdate_check ?? settings.raid_autoupdate_check);
 
         const updateUI = async () => {
-            const info = await findServerFromLogs((eft_install_path as string));
+            if (this.generations.get(actionId) !== gen) {
+                this.stopTimer(actionId);
+                return null;
+            }
+            const info = await findServerFromLogs(eftInstallPath);
+            if (this.generations.get(actionId) !== gen) {
+                this.stopTimer(actionId);
+                return null;
+            }
             if (info) {
-                const formatted = info.datacenter
-                    .replace("North America", "NA")
-                    .replace(" -", "")
-                    .replace(/ /g, "\n");
-                ev.action.setTitle(formatted);
+                ev.action.setTitle(formatDatacenter(info.datacenter));
             } else {
-                ev.action.setTitle(`No\nServer\nFound`);
+                ev.action.setTitle(NO_SERVER_TITLE);
             }
             return info;
         };
 
-        if (raid_autoupdate_check) {
-            intervalUpdateInterval = setInterval(updateUI, 3000);
+        if (raidAutoUpdate) {
+            await updateUI();
+            if (this.generations.get(actionId) !== gen) return;
+            const timer = setInterval(() => void updateUI(), INTERVALS.MAP_DISCOVERY);
+            this.timers.set(actionId, timer);
         } else {
             const info = await updateUI();
+            if (this.generations.get(actionId) !== gen) return;
             if (info) {
-                setTimeout(() => ev.action.setTitle(`Get\nCurrent\nServer`), 5000);
+                setTimeout(() => {
+                    if (this.generations.get(actionId) === gen && !this.timers.has(actionId)) {
+                        ev.action.setTitle(DEFAULT_TITLE);
+                    }
+                }, 5_000);
             }
         }
     }
 
-    override onDidReceiveSettings(ev: DidReceiveSettingsEvent): void | Promise<void> {
-        const { eft_install_path, raid_autoupdate_check } = ev.payload.settings;
-        globalThis.eftInstallPath = eft_install_path;
-        globalThis.raid_autoupdate_check = raid_autoupdate_check;
-
-        streamDeck.logger.info("Received settings:", ev.payload.settings);
-
-        const updatedData = {
-            global: {
-                eft_install_path,
-            },
-            current_server_info: {
-                raid_autoupdate_check,
-            },
-        };
-
-        saveSettings(updatedData);
+    override onDidReceiveSettings(ev: DidReceiveSettingsEvent<RaidServerSettings>): void | Promise<void> {
+        const { eft_install_path, raid_autoupdate_check } = ev.payload.settings ?? ({} as RaidServerSettings);
+        settingsService.save({
+            global: { eft_install_path },
+            current_server_info: { raid_autoupdate_check },
+        });
     }
 
     override onWillDisappear(ev: WillDisappearEvent): void | Promise<void> {
-        if (intervalUpdateInterval) {
-            clearInterval(intervalUpdateInterval);
-            intervalUpdateInterval = null;
-        }
+        this.stopTimer(ev.action.id);
     }
 
-    override async onSendToPlugin(ev: SendToPluginEvent<any, any>): Promise<void> {
-        const payload = ev.payload as any;
-        streamDeck.logger.info("onSendToPlugin received:", JSON.stringify(payload));
+    override async onSendToPlugin(ev: SendToPluginEvent<JsonValue, JsonObject>): Promise<void> {
+        const handled = await handleCommonCommands(ev);
+        if (handled) return;
+        streamDeck.logger.info("raidserver onSendToPlugin (unhandled):", JSON.stringify(ev.payload));
+    }
 
-        if (ev.payload === 'openPatreon') {
-            streamDeck.system.openUrl('https://patreon.com/tarkovboteu');
+    private stopTimer(actionId: string): void {
+        const t = this.timers.get(actionId);
+        if (t) {
+            clearInterval(t);
+            this.timers.delete(actionId);
+        }
+        this.bumpGen(actionId);
+    }
+
+    private bumpGen(actionId: string): number {
+        const gen = (this.generations.get(actionId) ?? 0) + 1;
+        this.generations.set(actionId, gen);
+        return gen;
+    }
+
+    private async maybeInheritFromGlobal(
+        action: any,
+        settings: RaidServerSettings,
+    ): Promise<void> {
+        const global = settingsService.load();
+        const inherited: RaidServerSettings = { ...settings };
+        let changed = false;
+
+        if (!settings.eft_install_path && global.eftInstallPath) {
+            inherited.eft_install_path = global.eftInstallPath;
+            changed = true;
+        }
+        if (settings.raid_autoupdate_check === undefined && global.raid_autoupdate_check) {
+            inherited.raid_autoupdate_check = global.raid_autoupdate_check;
+            changed = true;
         }
 
-        if (payload.command === "autoDetectPath") {
-            streamDeck.logger.info("Starting auto-detect path...");
-            const result = await detectEftPath();
-            streamDeck.logger.info("Auto-detect result:", JSON.stringify(result));
-
-            if (result.success && result.path) {
-                // Update the action settings with the detected path
-                await ev.action.setSettings({
-                    ...await ev.action.getSettings(),
-                    eft_install_path: result.path
-                });
-
-                // Save to global settings
-                saveSettings({
-                    global: { eft_install_path: result.path }
-                });
-
-                // Send success response back to property inspector
-                await streamDeck.ui.current?.sendToPropertyInspector({
-                    event: "autoDetectResult",
-                    success: true,
-                    path: result.path
-                });
-            } else {
-                // Send error response
-                await streamDeck.ui.current?.sendToPropertyInspector({
-                    event: "autoDetectResult",
-                    success: false,
-                    error: result.error
-                });
-            }
-        } else if (payload.command === "getGlobalSettings") {
-            const settings = loadSettings();
-            streamDeck.logger.info("Sending global settings:", settings.eftInstallPath);
-            await streamDeck.ui.current?.sendToPropertyInspector({
-                event: "globalSettings",
-                eft_install_path: settings.eftInstallPath
-            });
+        if (changed) {
+            await action.setSettings(inherited as unknown as JsonObject);
+            settingsService.invalidateCache();
         }
     }
 }

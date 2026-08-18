@@ -1,172 +1,170 @@
 import {
     action,
     streamDeck,
+    DidReceiveSettingsEvent,
+    SendToPluginEvent,
     SingletonAction,
     WillAppearEvent,
-    DidReceiveSettingsEvent,
     WillDisappearEvent,
-    SendToPluginEvent,
 } from "@elgato/streamdeck";
+import type { JsonValue, JsonObject } from "@elgato/utils";
+import { INTERVALS, URL_PATREON } from "../config/constants";
+import { tarkovApiService } from "../services/api-service";
+import type { GameMode, TraderData, TraderRestockSettings } from "../types";
+import { formatCountdown } from "../utils/time-format";
 
+const LOADING_TITLE = "\n\n\nLoading";
+const NO_DATA_TITLE = "\n\n\nNo Data";
+const RESTOCK_TITLE = "\n\n\nRestock";
+const SELECT_BOTH_TITLE = "Select\nTrader\n& Mode";
+const SELECT_TRADER_TITLE = "Select\nTrader";
+const SELECT_MODE_TITLE = "Select\nGame\nMode";
 
-interface TraderData {
-    name: string;
-    resetTime: string;
+function isValidGameMode(mode: unknown): mode is GameMode {
+    return mode === "PVP" || mode === "PVE" || mode === "SEASON";
 }
 
-interface TraderSettings {
-    selectedTrader?: string;
-    pve_traders_mode_check?: boolean;
+function migrateLegacy(settings: TraderRestockSettings): TraderRestockSettings {
+    if (isValidGameMode(settings.game_mode)) return settings;
+    const legacy = (settings as any).pve_traders_mode_check;
+    if (typeof legacy !== "boolean") return settings;
+    const migrated = { ...settings };
+    migrated.game_mode = legacy ? "PVE" : "PVP";
+    delete (migrated as any).pve_traders_mode_check;
+    return migrated;
 }
-
-interface ApiResponse {
-    data: {
-        traders: TraderData[];
-    }
-}
-
-const apiURL_PVE = "https://tarkovbot.eu/api/pve/streamdeck/trader-resets";
-const apiURL_PVP = "https://tarkovbot.eu/api/streamdeck/trader-resets";
-
-let data_PVE: TraderData[] = [];
-let data_PVP: TraderData[] = [];
-
-async function refreshDataPVE(): Promise<void> {
-    try {
-        const response = await fetch(apiURL_PVE);
-        const jsonData = await response.json();
-        data_PVE = (jsonData as ApiResponse).data.traders;
-    } catch (error) {
-        console.error("Error fetching PVE data:", error);
-        data_PVE = [];
-    }
-}
-
-async function refreshDataPVP(): Promise<void> {
-    try {
-        const response = await fetch(apiURL_PVP);
-        const jsonData = await response.json();
-        data_PVP = (jsonData as ApiResponse).data.traders;
-    } catch (error) {
-        console.error("Error fetching PVP data:", error);
-        data_PVP = [];
-    }
-}
-
-refreshDataPVP();
-refreshDataPVE();
-setInterval(refreshDataPVP, 900000);
-setInterval(refreshDataPVE, 900000);
 
 @action({ UUID: "eu.tarkovbot.tools.traderrestock" })
 export class TarkovTraderRestock extends SingletonAction {
-    private updateIntervals = new Map<string, NodeJS.Timeout>();
+    private timers = new Map<string, NodeJS.Timeout>();
+    private generations = new Map<string, number>();
 
-    private updateTitleAndImage(action: any, restockData?: TraderData): void {
-        if (!restockData) {
-            action.setTitle("\n\n\nNo Data");
+    override async onWillAppear(ev: WillAppearEvent<TraderRestockSettings>): Promise<void> {
+        const raw = ev.payload.settings ?? ({} as TraderRestockSettings);
+        const settings = migrateLegacy(raw);
+        if (settings !== raw) {
+            await ev.action.setSettings(settings as unknown as JsonObject);
+        }
+        await this.renderFor(ev.action, settings);
+    }
+
+    override onWillDisappear(ev: WillDisappearEvent<TraderRestockSettings>): void | Promise<void> {
+        this.stopTimer(ev.action.id);
+    }
+
+    override async onDidReceiveSettings(
+        ev: DidReceiveSettingsEvent<TraderRestockSettings>,
+    ): Promise<void> {
+        const settings = ev.payload.settings ?? ({} as TraderRestockSettings);
+        await this.renderFor(ev.action, settings);
+    }
+
+    private async renderFor(action: any, settings: TraderRestockSettings): Promise<void> {
+        const actionId = action.id;
+        this.stopTimer(actionId);
+
+        const hasMode = isValidGameMode(settings.game_mode);
+        const hasTrader = !!settings.selectedTrader;
+
+        if (!hasMode && !hasTrader) {
+            action.setTitle(SELECT_BOTH_TITLE);
+            action.setImage("");
+            return;
+        }
+        if (!hasMode) {
+            action.setTitle(SELECT_MODE_TITLE);
+            this.applyTraderImage(action, settings.selectedTrader);
+            return;
+        }
+        if (!hasTrader) {
+            action.setTitle(SELECT_TRADER_TITLE);
+            action.setImage("");
             return;
         }
 
-        const resetTime = new Date(restockData.resetTime);
-        const currentTime = new Date();
-        const timeDifference = resetTime.getTime() - currentTime.getTime();
-
-        if (timeDifference >= 0) {
-            const hours = String(Math.floor(timeDifference / (1000 * 60 * 60))).padStart(2, '0');
-            const minutes = String(Math.floor((timeDifference % (1000 * 60 * 60)) / (1000 * 60))).padStart(2, '0');
-            const seconds = String(Math.floor((timeDifference % (1000 * 60)) / 1000)).padStart(2, '0');
-            action.setTitle(`\n\n\n${hours}:${minutes}:${seconds}`);
-        } else {
-            action.setTitle(`\n\n\nRestock`);
-        }
+        this.applyTraderImage(action, settings.selectedTrader);
+        await this.startUpdating(action, settings);
     }
 
-    private async startUpdating(action: any, settings: TraderSettings, actionId: string): Promise<void> {
-        // Clear existing interval for this action
-        this.stopUpdating(actionId);
+    private async startUpdating(action: any, settings: TraderRestockSettings): Promise<void> {
+        const actionId = action.id;
+        const gen = this.bumpGen(actionId);
 
-        action.setTitle("\n\n\nLoading");
+        action.setTitle(LOADING_TITLE);
+        const mode = settings.game_mode!;
 
-        // Wait for data to be refreshed if it's empty
-        if (settings.pve_traders_mode_check && (!Array.isArray(data_PVE) || data_PVE.length === 0)) {
-            await refreshDataPVE();
-        } else if (!settings.pve_traders_mode_check && (!Array.isArray(data_PVP) || data_PVP.length === 0)) {
-            await refreshDataPVP();
-        }
+        await tarkovApiService.getTraders(mode);
 
-        const intervalId = setInterval(() => {
-            const trader = settings.selectedTrader;
-            const pveMode = settings.pve_traders_mode_check;
+        if (this.generations.get(actionId) !== gen) return;
 
-            if (!trader) {
-                action.setTitle("No\nTrader\nSelected");
+        const tick = () => {
+            if (this.generations.get(actionId) !== gen) {
+                this.stopTimer(actionId);
                 return;
             }
-
-            const traderData = pveMode ? data_PVE : data_PVP;
-
-            if (!Array.isArray(traderData) || traderData.length === 0) {
-                action.setTitle("\n\n\nNo Data");
-                return;
-            }
-
-            const restockData = traderData.find(data => data.name === trader);
-
-            if (!restockData) {
-                action.setTitle("\n\n\nNo Data");
-                return;
-            }
-
-            this.updateTitleAndImage(action, restockData);
-        }, 1000);
-
-        this.updateIntervals.set(actionId, intervalId);
+            void this.renderTick(action, settings, mode);
+        };
+        tick();
+        const timer = setInterval(tick, INTERVALS.TRADER_RESTOCK);
+        this.timers.set(actionId, timer);
     }
 
-    private stopUpdating(actionId: string): void {
-        const intervalId = this.updateIntervals.get(actionId);
-        if (intervalId) {
-            clearInterval(intervalId);
-            this.updateIntervals.delete(actionId);
+    private stopTimer(actionId: string): void {
+        const t = this.timers.get(actionId);
+        if (t) {
+            clearInterval(t);
+            this.timers.delete(actionId);
         }
+        this.bumpGen(actionId);
     }
 
-    override onWillAppear(ev: WillAppearEvent<TraderSettings>): void | Promise<void> {
-        const settings = ev.payload.settings;
-        const actionId = ev.action.id;
+    private bumpGen(actionId: string): number {
+        const gen = (this.generations.get(actionId) ?? 0) + 1;
+        this.generations.set(actionId, gen);
+        return gen;
+    }
 
+    private async renderTick(
+        action: any,
+        settings: TraderRestockSettings,
+        mode: GameMode,
+    ): Promise<void> {
         if (!settings.selectedTrader) {
-            ev.action.setTitle("Select\nTrader");
-        }
-
-        ev.action.setImage(`assets/${settings.selectedTrader}.png`);
-        this.startUpdating(ev.action, settings, actionId);
-    }
-
-    override onWillDisappear(ev: WillDisappearEvent<TraderSettings>): void | Promise<void> {
-        this.stopUpdating(ev.action.id);
-    }
-
-    override onDidReceiveSettings(ev: DidReceiveSettingsEvent<TraderSettings>): void | Promise<void> {
-        const settings = ev.payload.settings;
-        const actionId = ev.action.id;
-
-        this.stopUpdating(actionId);
-
-        if (!settings.selectedTrader) {
-            ev.action.setTitle("Select\nTrader");
-            ev.action.setImage(``);
+            action.setTitle(SELECT_TRADER_TITLE);
             return;
         }
 
-        ev.action.setImage(`assets/${settings.selectedTrader}.png`);
-        this.startUpdating(ev.action, settings, actionId);
+        const traders = await tarkovApiService.getTraders(mode);
+        const trader = traders.find((t) => t.name === settings.selectedTrader);
+
+        if (!trader) {
+            action.setTitle(NO_DATA_TITLE);
+            return;
+        }
+
+        this.renderCountdown(action, trader);
     }
 
-    override async onSendToPlugin(ev: SendToPluginEvent<JsonValue, LaunchSettings>): void | Promise<void> {
-        if (ev.payload === 'openPatreon') {
-            streamDeck.system.openUrl('https://patreon.com/tarkovboteu');
+    private renderCountdown(action: any, trader: TraderData): void {
+        const remaining = new Date(trader.resetTime).getTime() - Date.now();
+        if (remaining <= 0) {
+            action.setTitle(RESTOCK_TITLE);
+            return;
+        }
+        action.setTitle(`\n\n\n${formatCountdown(remaining)}`);
+    }
+
+    private applyTraderImage(action: any, traderName?: string): void {
+        if (!traderName) {
+            action.setImage("");
+            return;
+        }
+        action.setImage(`assets/${traderName}.png`);
+    }
+
+    override async onSendToPlugin(ev: SendToPluginEvent<JsonValue, JsonObject>): Promise<void> {
+        if (typeof ev.payload === "string" && ev.payload === "openPatreon") {
+            streamDeck.system.openUrl(URL_PATREON);
         }
     }
 }

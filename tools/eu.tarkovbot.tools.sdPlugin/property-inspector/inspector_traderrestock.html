@@ -22,14 +22,18 @@
     </sdpi-select>
   </sdpi-item>
 
-  <sdpi-item label="PVE Mode">
-    <sdpi-checkbox setting="pve_traders_mode_check"></sdpi-checkbox>
+  <sdpi-item label="Game Mode">
+    <sdpi-select setting="game_mode" placeholder="Select Game Mode">
+      <option value="PVP">PVP</option>
+      <option value="PVE">PVE</option>
+      <option value="SEASON">Season</option>
+    </sdpi-select>
   </sdpi-item>
 
   <div style="padding: 8px; background: rgba(255, 255, 255, 0.05); border-radius: 4px; border-left: 3px solid lime; font-family: system-ui;">
-    <div style="color: white; font-size: 12px; font-weight: bold; margin-bottom: 2px;">PVE Mode:</div>
+    <div style="color: white; font-size: 12px; font-weight: bold; margin-bottom: 2px;">Game Mode:</div>
     <div style="color: #ccc; font-size: 11px; line-height: 1.4;">
-      The displayed trader data will be based on PVE values.
+      Selects which trader-restock dataset the button reads from.
     </div>
   </div>
 

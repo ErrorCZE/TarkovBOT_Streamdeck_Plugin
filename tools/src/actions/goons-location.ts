@@ -1,90 +1,235 @@
-import { action, streamDeck, KeyDownEvent, SingletonAction, WillAppearEvent, SendToPluginEvent } from "@elgato/streamdeck";
+import {
+    action,
+    streamDeck,
+    KeyDownEvent,
+    SendToPluginEvent,
+    SingletonAction,
+    WillAppearEvent,
+    WillDisappearEvent,
+} from "@elgato/streamdeck";
+import type { JsonValue, JsonObject } from "@elgato/utils";
+import { ENDPOINTS, INTERVALS, URL_PATREON, URL_WEBSITE } from "../config/constants";
+import type { GoonsLocationSettings, GoonsModeReport, GoonsReport, GoonsSource } from "../types";
+import { formatElapsed } from "../utils/time-format";
 
-const apiURL = "https://tarkovbot.eu/api/streamdeck/goonslocation";
+const DEFAULT_TITLE = `Get\nGoons\nLocation`;
+const SELECT_MODE_TITLE = "Select\nGame\nMode";
+const ENTER_TOKEN_TITLE = "Enter\nYour\nToken";
+const SELECT_MODE_AND_TOKEN_TITLE = "Select Mode\n& Token";
 
-interface GoonsData {
-    location: string;
-    reported: string;
-    pvp: {
-        location: string;
-        reported: string;
-    }
-    pve: {
-        location: string;
-        reported: string;
-    }
+function isValidGoonsSource(source: GoonsSource | undefined | string | null): source is GoonsSource {
+    return source === "PVP" || source === "PVE" || source === "SEASON";
 }
 
 @action({ UUID: "eu.tarkovbot.tools.goonsgetlocation" })
 export class TarkovGoonsLocation extends SingletonAction {
+    private autoRefreshTimers = new Map<string, NodeJS.Timeout>();
+    private autoResetTimers = new Map<string, NodeJS.Timeout>();
+    private generations = new Map<string, number>();
 
-    override onWillAppear(ev: WillAppearEvent): void | Promise<void> {
-        ev.action.setTitle(`Get\nGoons\nLocation`);
-    };
+    override async onWillAppear(ev: WillAppearEvent<GoonsLocationSettings>): Promise<void> {
+        const settings = ev.payload.settings ?? ({} as GoonsLocationSettings);
+        await this.renderIdle(ev.action, settings);
+    }
 
-    override async onKeyDown(ev: KeyDownEvent): Promise<void> {
-        const { selectedGoonsSource, token } = ev.payload.settings;
+    override onWillDisappear(ev: WillDisappearEvent): void | Promise<void> {
+        this.stopAllTimers(ev.action.id);
+    }
 
-        if (!token) {
-            ev.action.setTitle("Enter\nYour\nToken");
+    override async onDidReceiveSettings(
+        ev: { action: any; payload: { settings: GoonsLocationSettings } } & any,
+    ): Promise<void> {
+        const actionId = ev.action.id;
+        const settings = ev.payload.settings ?? ({} as GoonsLocationSettings);
+
+        if (!this.autoResetTimers.has(actionId) && !this.autoRefreshTimers.has(actionId)) {
+            await this.renderIdle(ev.action, settings);
+        }
+    }
+    private async renderIdle(action: any, settings: GoonsLocationSettings): Promise<void> {
+        const actionId = action.id;
+        this.stopAllTimers(actionId);
+
+        const hasSource = isValidGoonsSource(settings.selectedGoonsSource);
+        const hasToken = !!settings.token;
+
+        if (!hasSource && !hasToken) {
+            action.setTitle(SELECT_MODE_AND_TOKEN_TITLE);
+            return;
+        }
+        if (!hasSource) {
+            action.setTitle(SELECT_MODE_TITLE);
+            return;
+        }
+        if (!hasToken) {
+            action.setTitle(ENTER_TOKEN_TITLE);
             return;
         }
 
-        if (!selectedGoonsSource) {
-            ev.action.setTitle("Select\nSource");
+        action.setTitle(DEFAULT_TITLE);
+
+        if (settings.auto_refresh) {
+            this.startAutoRefresh(action, settings);
+        }
+    }
+
+    override async onKeyDown(ev: KeyDownEvent<GoonsLocationSettings>): Promise<void> {
+        const actionId = ev.action.id;
+
+        this.stopAllTimers(actionId);
+        const gen = this.bumpGen(actionId);
+
+        const { selectedGoonsSource, token } = ev.payload.settings ?? ({} as GoonsLocationSettings);
+
+        if (!isValidGoonsSource(selectedGoonsSource)) {
+            ev.action.setTitle(SELECT_MODE_TITLE);
+            return;
+        }
+        if (!token) {
+            ev.action.setTitle(ENTER_TOKEN_TITLE);
             return;
         }
 
         try {
-
-            const response = await fetch(apiURL, {
+            const response = await fetch(ENDPOINTS.GOONS_LOCATION, {
                 method: "GET",
-                headers: {
-                    "AUTH-TOKEN": String(token)
-                }
+                headers: { "auth-token": String(token) },
             });
+
+            if (this.generations.get(actionId) !== gen) return;
 
             if (response.status === 401) {
                 ev.action.setTitle("Invalid\nToken");
+                this.scheduleReset(actionId, gen, ev.action);
                 return;
             }
-
             if (response.status !== 200) {
                 ev.action.setTitle("Something\nWent\nWrong.");
+                this.scheduleReset(actionId, gen, ev.action);
                 return;
             }
 
-            const goonsData = await response.json() as GoonsData;
-            let location = selectedGoonsSource === "NEW" ? goonsData.pvp.location : (selectedGoonsSource === "PVP" ? goonsData.pvp.location : goonsData.pve.location);
-            let reported = new Date(selectedGoonsSource === "NEW" ? goonsData.pvp.reported : (selectedGoonsSource === "PVP" ? goonsData.pvp.reported : goonsData.pve.reported));
+            const data = (await response.json()) as GoonsReport;
+            const report = this.selectReport(data, selectedGoonsSource);
+            if (!report) {
+                ev.action.setTitle("No\nReport\nYet");
+                this.scheduleReset(actionId, gen, ev.action);
+                return;
+            }
 
-            let timeDiff = Math.floor((Date.now() - reported.getTime()) / 1000);
+            const elapsedMs = Date.now() - new Date(report.reported).getTime();
+            ev.action.setTitle(`${report.location}\n${formatElapsed(elapsedMs)}`);
 
-            let hours = Math.floor(timeDiff / 3600);
-            let minutes = Math.floor((timeDiff % 3600) / 60);
-            let seconds = timeDiff % 60;
-
-            let reportedFormatted = `${hours > 0 ? `${hours}h ` : ''}${minutes > 0 ? `${minutes % 60}m ` : ''}${seconds % 60}s`;
-
-            ev.action.setTitle(`${location}\n${reportedFormatted}`);
-
-            // Wait 5 seconds and then set title again to press
-            setTimeout(() => {
-                ev.action.setTitle(`Get\nGoons\nLocation`);
-            }, 5000)
-
-        } catch (error) {
-            ev.action.setTitle(`Something\nWent\nWrong.`);
+            // Only schedule reset if auto-refresh is NOT running
+            if (!this.autoRefreshTimers.has(actionId)) {
+                this.scheduleReset(actionId, gen, ev.action);
+            }
+        } catch {
+            if (this.generations.get(actionId) === gen) {
+                ev.action.setTitle("Something\nWent\nWrong.");
+            }
         }
     }
 
-    override async onSendToPlugin(ev: SendToPluginEvent<JsonValue, LaunchSettings>): void | Promise<void> {
-        if (ev.payload === 'openWebsite') {
-            streamDeck.system.openUrl('https://tarkovbot.eu/stream-deck');
+    private scheduleReset(actionId: string, gen: number, action: any): void {
+        // Clear any previous reset timer for this action
+        const prev = this.autoResetTimers.get(actionId);
+        if (prev) clearTimeout(prev);
+
+        const reset = setTimeout(() => {
+            this.autoResetTimers.delete(actionId);
+            if (
+                this.generations.get(actionId) === gen &&
+                !this.autoRefreshTimers.has(actionId)
+            ) {
+                action.setTitle(DEFAULT_TITLE);
+            }
+        }, 5_000);
+        this.autoResetTimers.set(actionId, reset);
+    }
+
+    private selectReport(data: GoonsReport, source: GoonsSource): GoonsModeReport | null {
+        if (source === "PVP") return data.pvp;
+        if (source === "PVE") return data.pve;
+        if (source === "SEASON") return data.season ?? null;
+        return null;
+    }
+
+    private startAutoRefresh(action: any, settings: GoonsLocationSettings): void {
+        const actionId = action.id;
+        if (!settings.token || !isValidGoonsSource(settings.selectedGoonsSource)) return;
+
+        // Initial fetch immediately
+        void this.fetchAndRender(action, settings);
+
+        const timer = setInterval(() => {
+            void this.fetchAndRender(action, settings);
+        }, INTERVALS.GOONS_AUTO_REFRESH);
+        this.autoRefreshTimers.set(actionId, timer);
+    }
+
+    private async fetchAndRender(action: any, settings: GoonsLocationSettings): Promise<void> {
+        const { selectedGoonsSource, token } = settings;
+        if (!isValidGoonsSource(selectedGoonsSource) || !token) return;
+
+        try {
+            const response = await fetch(ENDPOINTS.GOONS_LOCATION, {
+                method: "GET",
+                headers: { "auth-token": String(token) },
+            });
+
+            if (response.status === 401) {
+                action.setTitle("Invalid\nToken");
+                return;
+            }
+            if (response.status !== 200) {
+                action.setTitle("Something\nWent\nWrong.");
+                return;
+            }
+
+            const data = (await response.json()) as GoonsReport;
+            const report = this.selectReport(data, selectedGoonsSource);
+            if (!report) {
+                action.setTitle("No\nReport\nYet");
+                return;
+            }
+
+            const elapsedMs = Date.now() - new Date(report.reported).getTime();
+            action.setTitle(`${report.location}\n${formatElapsed(elapsedMs)}`);
+        } catch {
+            // silent — keep last title
         }
-        if (ev.payload === 'openPatreon') {
-            streamDeck.system.openUrl('https://patreon.com/tarkovboteu');
+    }
+
+    private stopAllTimers(actionId: string): void {
+        const refresh = this.autoRefreshTimers.get(actionId);
+        if (refresh) {
+            clearInterval(refresh);
+            this.autoRefreshTimers.delete(actionId);
+        }
+        const reset = this.autoResetTimers.get(actionId);
+        if (reset) {
+            clearTimeout(reset);
+            this.autoResetTimers.delete(actionId);
+        }
+        this.bumpGen(actionId);
+    }
+
+    private bumpGen(actionId: string): number {
+        const gen = (this.generations.get(actionId) ?? 0) + 1;
+        this.generations.set(actionId, gen);
+        return gen;
+    }
+
+    override async onSendToPlugin(ev: SendToPluginEvent<JsonValue, JsonObject>): Promise<void> {
+        if (typeof ev.payload !== "string") return;
+        switch (ev.payload) {
+            case "openWebsite":
+                streamDeck.system.openUrl(URL_WEBSITE);
+                break;
+            case "openPatreon":
+                streamDeck.system.openUrl(URL_PATREON);
+                break;
         }
     }
 }
-

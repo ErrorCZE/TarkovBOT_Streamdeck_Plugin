@@ -1,26 +1,15 @@
-import {
-    streamDeck,
-    action,
-    SingletonAction,
-    WillAppearEvent,
-    WillDisappearEvent
-} from "@elgato/streamdeck";
-import { loadSettings } from "../utils/settings";
-import { getMapData } from "../utils/map-data";
-
-let intervalUpdateInterval: NodeJS.Timeout | null = null;
-let lastPveMode: boolean | null = null;
-
-// Global variables to track map changes for all boss instances
-let currentGlobalLocationId: string | null = null;
-let lastImageFetchMap: string | null = null;
-let bossImageCache: Record<string, string> = {};
+import { action, SingletonAction, WillAppearEvent, WillDisappearEvent } from "@elgato/streamdeck";
+import { INTERVALS } from "../config/constants";
+import { tarkovApiService } from "../services/api-service";
+import { settingsService } from "../services/settings-service";
+import { stateService } from "../services/state-service";
+import type { ConsolidatedBoss, GameMode } from "../types";
 
 @action({ UUID: "eu.tarkovbot.tools.mapinfo.boss" })
 export class TarkovCurrentMapInfo_Boss extends SingletonAction {
-    private bossIndex: number;
-    private activeInstance: boolean = false;
-    private updateInterval: NodeJS.Timeout | null = null;
+    protected readonly bossIndex: number;
+    private timer: NodeJS.Timeout | null = null;
+    private lastGameMode: GameMode | null = null;
 
     constructor(bossIndex: number) {
         super();
@@ -28,156 +17,60 @@ export class TarkovCurrentMapInfo_Boss extends SingletonAction {
     }
 
     override async onWillAppear(ev: WillAppearEvent): Promise<void> {
-        this.activeInstance = true;
-
-        // Clear display on initial appearance
-        this.clearBossDisplay(ev);
-
-        const settings = loadSettings();
-
-        // Set up map change tracking interval ONLY if auto-update is enabled
-        if (intervalUpdateInterval === null && settings.map_autoupdate_check) {
-            currentGlobalLocationId = globalThis.location;
-
-            intervalUpdateInterval = setInterval(() => {
-                const newLocationId = globalThis.location;
-
-                if (newLocationId !== currentGlobalLocationId) {
-                    bossImageCache = {};
-                    lastImageFetchMap = null;
-                    currentGlobalLocationId = newLocationId;
-                }
-            }, 3000);
-        }
-
-        // Initial update - Always run this
         await this.updateBossInfo(ev);
 
-        // Set up periodic update ONLY if auto-update is enabled
+        const settings = settingsService.load();
         if (settings.map_autoupdate_check) {
-            this.updateInterval = setInterval(async () => {
-                if (!this.activeInstance) {
-                    this.clearUpdateInterval();
-                    return;
-                }
-                await this.updateBossInfo(ev);
-            }, 5000);
+            this.timer = setInterval(() => void this.updateBossInfo(ev), INTERVALS.MAP_INFO_AUTO_UPDATE);
         }
     }
 
-    override onWillDisappear(ev: WillDisappearEvent): void {
-        this.activeInstance = false;
-        this.clearUpdateInterval();
-    }
-
-    private clearUpdateInterval(): void {
-        if (this.updateInterval) {
-            clearInterval(this.updateInterval);
-            this.updateInterval = null;
+    override onWillDisappear(_ev: WillDisappearEvent): void | Promise<void> {
+        if (this.timer) {
+            clearInterval(this.timer);
+            this.timer = null;
         }
-    }
-
-    // Helper method to clear the display
-    private async clearBossDisplay(ev: WillAppearEvent): Promise<void> {
-        ev.action.setTitle("");
-        ev.action.setImage("");
     }
 
     private async updateBossInfo(ev: WillAppearEvent): Promise<void> {
-        // Reload settings on each update to detect changes
-        const settings = loadSettings();
+        const settings = settingsService.load();
 
-        // Check if PVE mode has changed
-        if (lastPveMode !== settings.pve_map_mode_check) {
-            lastImageFetchMap = null;
-            bossImageCache = {};
-            lastPveMode = settings.pve_map_mode_check;
+        if (this.lastGameMode !== null && this.lastGameMode !== settings.game_mode) {
+            tarkovApiService.invalidateBossImageCache();
         }
+        this.lastGameMode = settings.game_mode;
 
-        const locationId = globalThis.location;
-
-        // Do nothing if location is not available
+        const locationId = stateService.currentLocationId;
         if (!locationId) {
             ev.action.setTitle("\nUnknown\nLocation");
             return;
         }
 
-        // Get the correct map data source based on settings
-        const mapData = getMapData(locationId, settings.pve_map_mode_check);
-
-        // Handle no map data case
+        const mapData = stateService.getMapData(locationId, settings.game_mode);
         if (!mapData) {
             ev.action.setTitle("\nNo Map\nData");
             return;
         }
 
-        // Check if bosses array exists and has enough elements
-        if (!mapData.bosses || this.bossIndex >= mapData.bosses.length) {
-            this.clearBossDisplay(ev);
-            return;
-        }
-
-        // Get boss data for this index
-        const boss = mapData.bosses[this.bossIndex];
+        const boss = mapData.bosses?.[this.bossIndex] as ConsolidatedBoss | undefined;
         if (!boss) {
-            this.clearBossDisplay(ev);
+            ev.action.setTitle("");
+            ev.action.setImage("");
             return;
         }
 
-        // Format boss name
-        let bossNameFormatted = boss.name.split(" ").join("\n");
+        ev.action.setTitle(`${this.formatBossName(boss.name)}\n${boss.spawnChance}`);
 
-        if (bossNameFormatted === "Knight") bossNameFormatted = "Goons";
-        if (bossNameFormatted === "Cultist\nPriest") bossNameFormatted = "Cultists";
-
-        // Set title
-        ev.action.setTitle(`${bossNameFormatted}\n${boss.spawnChance}`);
-
-        // Image fetching logic
-        // Always attempt to fetch/use image, but only re-fetch when map changes
-        if (locationId !== lastImageFetchMap) {
-            if (!bossImageCache[boss.id]) {
-                const imageUrl = `https://tarkovbot.eu/streamdeck/img/${boss.id}.webp`;
-                const fallbackUrl = `https://tarkovbot.eu/streamdeck/img/unknown_boss.webp`;
-
-                try {
-                    const base64Image = await this.fetchBase64Image(imageUrl, fallbackUrl);
-                    if (base64Image) {
-                        bossImageCache[boss.id] = base64Image;
-                    }
-                } catch (error) {
-                    streamDeck.logger.error(`Error fetching boss image for ${boss.id}:`, error);
-                }
-            }
-
-            if (bossImageCache[boss.id]) {
-                ev.action.setImage(bossImageCache[boss.id]);
-            }
-        } else if (bossImageCache[boss.id]) {
-            ev.action.setImage(bossImageCache[boss.id]);
+        const image = await tarkovApiService.getBossImage(boss.id);
+        if (image) {
+            ev.action.setImage(image);
         }
-
-        // Record that we've fetched images for this map
-        lastImageFetchMap = locationId;
     }
 
-    private async fetchBase64Image(url: string, fallbackUrl: string): Promise<string | null> {
-        try {
-            let response = await fetch(url);
-
-            if (!response.ok && fallbackUrl) {
-                response = await fetch(fallbackUrl);
-            }
-
-            if (!response.ok) {
-                return null;
-            }
-
-            const arrayBuffer = await response.arrayBuffer();
-            return `data:image/webp;base64,${Buffer.from(arrayBuffer).toString("base64")}`;
-        } catch (error) {
-            streamDeck.logger.error("Failed to fetch image:", error);
-            return null;
-        }
+    private formatBossName(name: string): string {
+        let formatted = name.split(" ").join("\n");
+        if (formatted === "Knight") formatted = "Goons";
+        if (formatted === "Cultist\nPriest") formatted = "Cultists";
+        return formatted;
     }
 }

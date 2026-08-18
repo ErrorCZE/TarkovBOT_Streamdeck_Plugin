@@ -1,33 +1,44 @@
-import { action, KeyDownEvent, SingletonAction, WillAppearEvent } from "@elgato/streamdeck";
+import { action, WillAppearEvent, WillDisappearEvent, SingletonAction } from "@elgato/streamdeck";
+import {
+    INTERVALS,
+    TARKOV_TIME_MULTIPLIER,
+    TARKOV_TIME_OFFSET_MS,
+    TARKOV_TIMEZONE,
+} from "../config/constants";
 
 @action({ UUID: "eu.tarkovbot.tools.tarkovtime" })
 export class TarkovTime extends SingletonAction {
-
-    private updateInterval: NodeJS.Timeout | undefined;
+    private timer: NodeJS.Timeout | null = null;
 
     override onWillAppear(ev: WillAppearEvent): void | Promise<void> {
-        const updateTarkovTime = () => {
-            const currentDateTime = new Date();
-            const multiplier = 7;
+        this.scheduleTicks(ev);
+    }
 
-            const tarkovTimeLeft = new Date(currentDateTime.getTime() * multiplier).toLocaleTimeString([], {
-                hour: '2-digit',
-                minute: '2-digit',
-                hour12: false,
-                timeZone: 'Europe/Moscow'
-            });
-            const tarkovTimeRight = new Date(currentDateTime.getTime() * multiplier - 43200000).toLocaleTimeString([], {
-                hour: '2-digit',
-                minute: '2-digit',
-                hour12: false,
-                timeZone: 'Europe/Moscow'
-            });
+    override onWillDisappear(_ev: WillDisappearEvent): void | Promise<void> {
+        if (this.timer) {
+            clearInterval(this.timer);
+            this.timer = null;
+        }
+    }
 
-            ev.action.setTitle(`${tarkovTimeLeft}\n${tarkovTimeRight}`);
+    private scheduleTicks(ev: WillAppearEvent): void {
+        const tick = () => {
+            const nowMs = Date.now();
+            const left = this.formatTarkovTime(nowMs * TARKOV_TIME_MULTIPLIER);
+            const right = this.formatTarkovTime(nowMs * TARKOV_TIME_MULTIPLIER - TARKOV_TIME_OFFSET_MS);
+            ev.action.setTitle(`${left}\n${right}`);
         };
 
-        this.updateInterval = setInterval(updateTarkovTime, 2000);
+        tick();
+        this.timer = setInterval(tick, INTERVALS.TARKOV_TIME);
+    }
 
-        updateTarkovTime();
+    private formatTarkovTime(epochMs: number): string {
+        return new Date(epochMs).toLocaleTimeString([], {
+            hour: "2-digit",
+            minute: "2-digit",
+            hour12: false,
+            timeZone: TARKOV_TIMEZONE,
+        });
     }
 }

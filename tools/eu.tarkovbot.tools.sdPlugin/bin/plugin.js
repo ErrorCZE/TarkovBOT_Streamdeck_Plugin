@@ -1,6 +1,6 @@
 import require$$0$3 from 'events';
 import require$$1$1 from 'https';
-import require$$2 from 'http';
+import require$$2$1 from 'http';
 import require$$3 from 'net';
 import require$$4 from 'tls';
 import require$$1 from 'crypto';
@@ -8,14 +8,13 @@ import require$$0$2 from 'stream';
 import require$$7 from 'url';
 import require$$0 from 'zlib';
 import require$$0$1 from 'buffer';
+import require$$2 from 'util';
 import fs, { existsSync, readFileSync } from 'node:fs';
 import path, { join } from 'node:path';
 import { cwd } from 'node:process';
 import { randomUUID } from 'node:crypto';
-import fs$1 from 'fs';
-import path$1 from 'path';
-import { exec } from 'child_process';
-import { promisify } from 'util';
+import { exec } from 'node:child_process';
+import { promisify } from 'node:util';
 
 /**
  * Default language supported by all i18n providers.
@@ -255,7 +254,7 @@ function get(source, path) {
 }
 
 /**
- * Internalization provider, responsible for managing localizations and translating resources.
+ * “Internationalization (i18n) provider, responsible for managing localizations and translating resources.
  */
 class I18nProvider {
     /**
@@ -710,6 +709,1010 @@ function withResolvers() {
     return { promise, resolve, reject };
 }
 
+/** A special constant with type `never` */
+function $constructor(name, initializer, params) {
+    function init(inst, def) {
+        var _a;
+        Object.defineProperty(inst, "_zod", {
+            value: inst._zod ?? {},
+            enumerable: false,
+        });
+        (_a = inst._zod).traits ?? (_a.traits = new Set());
+        inst._zod.traits.add(name);
+        initializer(inst, def);
+        // support prototype modifications
+        for (const k in _.prototype) {
+            if (!(k in inst))
+                Object.defineProperty(inst, k, { value: _.prototype[k].bind(inst) });
+        }
+        inst._zod.constr = _;
+        inst._zod.def = def;
+    }
+    // doesn't work if Parent has a constructor with arguments
+    const Parent = params?.Parent ?? Object;
+    class Definition extends Parent {
+    }
+    Object.defineProperty(Definition, "name", { value: name });
+    function _(def) {
+        var _a;
+        const inst = params?.Parent ? new Definition() : this;
+        init(inst, def);
+        (_a = inst._zod).deferred ?? (_a.deferred = []);
+        for (const fn of inst._zod.deferred) {
+            fn();
+        }
+        return inst;
+    }
+    Object.defineProperty(_, "init", { value: init });
+    Object.defineProperty(_, Symbol.hasInstance, {
+        value: (inst) => {
+            if (params?.Parent && inst instanceof params.Parent)
+                return true;
+            return inst?._zod?.traits?.has(name);
+        },
+    });
+    Object.defineProperty(_, "name", { value: name });
+    return _;
+}
+class $ZodAsyncError extends Error {
+    constructor() {
+        super(`Encountered Promise during synchronous parse. Use .parseAsync() instead.`);
+    }
+}
+const globalConfig = {};
+function config(newConfig) {
+    return globalConfig;
+}
+
+// functions
+function jsonStringifyReplacer(_, value) {
+    if (typeof value === "bigint")
+        return value.toString();
+    return value;
+}
+function cached(getter) {
+    return {
+        get value() {
+            {
+                const value = getter();
+                Object.defineProperty(this, "value", { value });
+                return value;
+            }
+        },
+    };
+}
+function cleanRegex(source) {
+    const start = source.startsWith("^") ? 1 : 0;
+    const end = source.endsWith("$") ? source.length - 1 : source.length;
+    return source.slice(start, end);
+}
+function defineLazy(object, key, getter) {
+    Object.defineProperty(object, key, {
+        get() {
+            {
+                const value = getter();
+                object[key] = value;
+                return value;
+            }
+        },
+        set(v) {
+            Object.defineProperty(object, key, {
+                value: v,
+                // configurable: true,
+            });
+            // object[key] = v;
+        },
+        configurable: true,
+    });
+}
+function assignProp(target, prop, value) {
+    Object.defineProperty(target, prop, {
+        value,
+        writable: true,
+        enumerable: true,
+        configurable: true,
+    });
+}
+function esc(str) {
+    return JSON.stringify(str);
+}
+const captureStackTrace = Error.captureStackTrace
+    ? Error.captureStackTrace
+    : (..._args) => { };
+function isObject(data) {
+    return typeof data === "object" && data !== null && !Array.isArray(data);
+}
+const allowsEval = cached(() => {
+    if (typeof navigator !== "undefined" && navigator?.userAgent?.includes("Cloudflare")) {
+        return false;
+    }
+    try {
+        const F = Function;
+        new F("");
+        return true;
+    }
+    catch (_) {
+        return false;
+    }
+});
+function escapeRegex(str) {
+    return str.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+// zod-specific utils
+function clone(inst, def, params) {
+    const cl = new inst._zod.constr(def ?? inst._zod.def);
+    if (!def || params?.parent)
+        cl._zod.parent = inst;
+    return cl;
+}
+function normalizeParams(_params) {
+    return {};
+}
+function optionalKeys(shape) {
+    return Object.keys(shape).filter((k) => {
+        return shape[k]._zod.optin === "optional" && shape[k]._zod.optout === "optional";
+    });
+}
+function aborted(x, startIndex = 0) {
+    for (let i = startIndex; i < x.issues.length; i++) {
+        if (x.issues[i]?.continue !== true)
+            return true;
+    }
+    return false;
+}
+function prefixIssues(path, issues) {
+    return issues.map((iss) => {
+        var _a;
+        (_a = iss).path ?? (_a.path = []);
+        iss.path.unshift(path);
+        return iss;
+    });
+}
+function unwrapMessage(message) {
+    return typeof message === "string" ? message : message?.message;
+}
+function finalizeIssue(iss, ctx, config) {
+    const full = { ...iss, path: iss.path ?? [] };
+    // for backwards compatibility
+    if (!iss.message) {
+        const message = unwrapMessage(iss.inst?._zod.def?.error?.(iss)) ??
+            unwrapMessage(ctx?.error?.(iss)) ??
+            unwrapMessage(config.customError?.(iss)) ??
+            unwrapMessage(config.localeError?.(iss)) ??
+            "Invalid input";
+        full.message = message;
+    }
+    // delete (full as any).def;
+    delete full.inst;
+    delete full.continue;
+    if (!ctx?.reportInput) {
+        delete full.input;
+    }
+    return full;
+}
+
+const initializer = (inst, def) => {
+    inst.name = "$ZodError";
+    Object.defineProperty(inst, "_zod", {
+        value: inst._zod,
+        enumerable: false,
+    });
+    Object.defineProperty(inst, "issues", {
+        value: def,
+        enumerable: false,
+    });
+    Object.defineProperty(inst, "message", {
+        get() {
+            return JSON.stringify(def, jsonStringifyReplacer, 2);
+        },
+        enumerable: true,
+        // configurable: false,
+    });
+    Object.defineProperty(inst, "toString", {
+        value: () => inst.message,
+        enumerable: false,
+    });
+};
+const $ZodError = $constructor("$ZodError", initializer);
+const $ZodRealError = $constructor("$ZodError", initializer, { Parent: Error });
+
+const _parse = (_Err) => (schema, value, _ctx, _params) => {
+    const ctx = _ctx ? Object.assign(_ctx, { async: false }) : { async: false };
+    const result = schema._zod.run({ value, issues: [] }, ctx);
+    if (result instanceof Promise) {
+        throw new $ZodAsyncError();
+    }
+    if (result.issues.length) {
+        const e = new (_params?.Err ?? _Err)(result.issues.map((iss) => finalizeIssue(iss, ctx, config())));
+        captureStackTrace(e, _params?.callee);
+        throw e;
+    }
+    return result.value;
+};
+const parse = /* @__PURE__*/ _parse($ZodRealError);
+const _parseAsync = (_Err) => async (schema, value, _ctx, params) => {
+    const ctx = _ctx ? Object.assign(_ctx, { async: true }) : { async: true };
+    let result = schema._zod.run({ value, issues: [] }, ctx);
+    if (result instanceof Promise)
+        result = await result;
+    if (result.issues.length) {
+        const e = new (params?.Err ?? _Err)(result.issues.map((iss) => finalizeIssue(iss, ctx, config())));
+        captureStackTrace(e, params?.callee);
+        throw e;
+    }
+    return result.value;
+};
+const parseAsync = /* @__PURE__*/ _parseAsync($ZodRealError);
+const _safeParse = (_Err) => (schema, value, _ctx) => {
+    const ctx = _ctx ? { ..._ctx, async: false } : { async: false };
+    const result = schema._zod.run({ value, issues: [] }, ctx);
+    if (result instanceof Promise) {
+        throw new $ZodAsyncError();
+    }
+    return result.issues.length
+        ? {
+            success: false,
+            error: new (_Err ?? $ZodError)(result.issues.map((iss) => finalizeIssue(iss, ctx, config()))),
+        }
+        : { success: true, data: result.value };
+};
+const safeParse = /* @__PURE__*/ _safeParse($ZodRealError);
+const _safeParseAsync = (_Err) => async (schema, value, _ctx) => {
+    const ctx = _ctx ? Object.assign(_ctx, { async: true }) : { async: true };
+    let result = schema._zod.run({ value, issues: [] }, ctx);
+    if (result instanceof Promise)
+        result = await result;
+    return result.issues.length
+        ? {
+            success: false,
+            error: new _Err(result.issues.map((iss) => finalizeIssue(iss, ctx, config()))),
+        }
+        : { success: true, data: result.value };
+};
+const safeParseAsync = /* @__PURE__*/ _safeParseAsync($ZodRealError);
+
+const string$1 = (params) => {
+    const regex = params ? `[\\s\\S]{${params?.minimum ?? 0},${params?.maximum ?? ""}}` : `[\\s\\S]*`;
+    return new RegExp(`^${regex}$`);
+};
+const number$1 = /^-?\d+(?:\.\d+)?/i;
+const boolean$1 = /true|false/i;
+
+class Doc {
+    constructor(args = []) {
+        this.content = [];
+        this.indent = 0;
+        if (this)
+            this.args = args;
+    }
+    indented(fn) {
+        this.indent += 1;
+        fn(this);
+        this.indent -= 1;
+    }
+    write(arg) {
+        if (typeof arg === "function") {
+            arg(this, { execution: "sync" });
+            arg(this, { execution: "async" });
+            return;
+        }
+        const content = arg;
+        const lines = content.split("\n").filter((x) => x);
+        const minIndent = Math.min(...lines.map((x) => x.length - x.trimStart().length));
+        const dedented = lines.map((x) => x.slice(minIndent)).map((x) => " ".repeat(this.indent * 2) + x);
+        for (const line of dedented) {
+            this.content.push(line);
+        }
+    }
+    compile() {
+        const F = Function;
+        const args = this?.args;
+        const content = this?.content ?? [``];
+        const lines = [...content.map((x) => `  ${x}`)];
+        // console.log(lines.join("\n"));
+        return new F(...args, lines.join("\n"));
+    }
+}
+
+const version = {
+    major: 4,
+    minor: 0,
+    patch: 0,
+};
+
+const $ZodType = /*@__PURE__*/ $constructor("$ZodType", (inst, def) => {
+    var _a;
+    inst ?? (inst = {});
+    inst._zod.def = def; // set _def property
+    inst._zod.bag = inst._zod.bag || {}; // initialize _bag object
+    inst._zod.version = version;
+    const checks = [...(inst._zod.def.checks ?? [])];
+    // if inst is itself a checks.$ZodCheck, run it as a check
+    if (inst._zod.traits.has("$ZodCheck")) {
+        checks.unshift(inst);
+    }
+    //
+    for (const ch of checks) {
+        for (const fn of ch._zod.onattach) {
+            fn(inst);
+        }
+    }
+    if (checks.length === 0) {
+        // deferred initializer
+        // inst._zod.parse is not yet defined
+        (_a = inst._zod).deferred ?? (_a.deferred = []);
+        inst._zod.deferred?.push(() => {
+            inst._zod.run = inst._zod.parse;
+        });
+    }
+    else {
+        const runChecks = (payload, checks, ctx) => {
+            let isAborted = aborted(payload);
+            let asyncResult;
+            for (const ch of checks) {
+                if (ch._zod.def.when) {
+                    const shouldRun = ch._zod.def.when(payload);
+                    if (!shouldRun)
+                        continue;
+                }
+                else if (isAborted) {
+                    continue;
+                }
+                const currLen = payload.issues.length;
+                const _ = ch._zod.check(payload);
+                if (_ instanceof Promise && ctx?.async === false) {
+                    throw new $ZodAsyncError();
+                }
+                if (asyncResult || _ instanceof Promise) {
+                    asyncResult = (asyncResult ?? Promise.resolve()).then(async () => {
+                        await _;
+                        const nextLen = payload.issues.length;
+                        if (nextLen === currLen)
+                            return;
+                        if (!isAborted)
+                            isAborted = aborted(payload, currLen);
+                    });
+                }
+                else {
+                    const nextLen = payload.issues.length;
+                    if (nextLen === currLen)
+                        continue;
+                    if (!isAborted)
+                        isAborted = aborted(payload, currLen);
+                }
+            }
+            if (asyncResult) {
+                return asyncResult.then(() => {
+                    return payload;
+                });
+            }
+            return payload;
+        };
+        inst._zod.run = (payload, ctx) => {
+            const result = inst._zod.parse(payload, ctx);
+            if (result instanceof Promise) {
+                if (ctx.async === false)
+                    throw new $ZodAsyncError();
+                return result.then((result) => runChecks(result, checks, ctx));
+            }
+            return runChecks(result, checks, ctx);
+        };
+    }
+    inst["~standard"] = {
+        validate: (value) => {
+            try {
+                const r = safeParse(inst, value);
+                return r.success ? { value: r.data } : { issues: r.error?.issues };
+            }
+            catch (_) {
+                return safeParseAsync(inst, value).then((r) => (r.success ? { value: r.data } : { issues: r.error?.issues }));
+            }
+        },
+        vendor: "zod",
+        version: 1,
+    };
+});
+const $ZodString = /*@__PURE__*/ $constructor("$ZodString", (inst, def) => {
+    $ZodType.init(inst, def);
+    inst._zod.pattern = [...(inst?._zod.bag?.patterns ?? [])].pop() ?? string$1(inst._zod.bag);
+    inst._zod.parse = (payload, _) => {
+        if (def.coerce)
+            try {
+                payload.value = String(payload.value);
+            }
+            catch (_) { }
+        if (typeof payload.value === "string")
+            return payload;
+        payload.issues.push({
+            expected: "string",
+            code: "invalid_type",
+            input: payload.value,
+            inst,
+        });
+        return payload;
+    };
+});
+const $ZodNumber = /*@__PURE__*/ $constructor("$ZodNumber", (inst, def) => {
+    $ZodType.init(inst, def);
+    inst._zod.pattern = inst._zod.bag.pattern ?? number$1;
+    inst._zod.parse = (payload, _ctx) => {
+        if (def.coerce)
+            try {
+                payload.value = Number(payload.value);
+            }
+            catch (_) { }
+        const input = payload.value;
+        if (typeof input === "number" && !Number.isNaN(input) && Number.isFinite(input)) {
+            return payload;
+        }
+        const received = typeof input === "number"
+            ? Number.isNaN(input)
+                ? "NaN"
+                : !Number.isFinite(input)
+                    ? "Infinity"
+                    : undefined
+            : undefined;
+        payload.issues.push({
+            expected: "number",
+            code: "invalid_type",
+            input,
+            inst,
+            ...(received ? { received } : {}),
+        });
+        return payload;
+    };
+});
+const $ZodBoolean = /*@__PURE__*/ $constructor("$ZodBoolean", (inst, def) => {
+    $ZodType.init(inst, def);
+    inst._zod.pattern = boolean$1;
+    inst._zod.parse = (payload, _ctx) => {
+        if (def.coerce)
+            try {
+                payload.value = Boolean(payload.value);
+            }
+            catch (_) { }
+        const input = payload.value;
+        if (typeof input === "boolean")
+            return payload;
+        payload.issues.push({
+            expected: "boolean",
+            code: "invalid_type",
+            input,
+            inst,
+        });
+        return payload;
+    };
+});
+function handleArrayResult(result, final, index) {
+    if (result.issues.length) {
+        final.issues.push(...prefixIssues(index, result.issues));
+    }
+    final.value[index] = result.value;
+}
+const $ZodArray = /*@__PURE__*/ $constructor("$ZodArray", (inst, def) => {
+    $ZodType.init(inst, def);
+    inst._zod.parse = (payload, ctx) => {
+        const input = payload.value;
+        if (!Array.isArray(input)) {
+            payload.issues.push({
+                expected: "array",
+                code: "invalid_type",
+                input,
+                inst,
+            });
+            return payload;
+        }
+        payload.value = Array(input.length);
+        const proms = [];
+        for (let i = 0; i < input.length; i++) {
+            const item = input[i];
+            const result = def.element._zod.run({
+                value: item,
+                issues: [],
+            }, ctx);
+            if (result instanceof Promise) {
+                proms.push(result.then((result) => handleArrayResult(result, payload, i)));
+            }
+            else {
+                handleArrayResult(result, payload, i);
+            }
+        }
+        if (proms.length) {
+            return Promise.all(proms).then(() => payload);
+        }
+        return payload; //handleArrayResultsAsync(parseResults, final);
+    };
+});
+function handleObjectResult(result, final, key) {
+    // if(isOptional)
+    if (result.issues.length) {
+        final.issues.push(...prefixIssues(key, result.issues));
+    }
+    final.value[key] = result.value;
+}
+function handleOptionalObjectResult(result, final, key, input) {
+    if (result.issues.length) {
+        // validation failed against value schema
+        if (input[key] === undefined) {
+            // if input was undefined, ignore the error
+            if (key in input) {
+                final.value[key] = undefined;
+            }
+            else {
+                final.value[key] = result.value;
+            }
+        }
+        else {
+            final.issues.push(...prefixIssues(key, result.issues));
+        }
+    }
+    else if (result.value === undefined) {
+        // validation returned `undefined`
+        if (key in input)
+            final.value[key] = undefined;
+    }
+    else {
+        // non-undefined value
+        final.value[key] = result.value;
+    }
+}
+const $ZodObject = /*@__PURE__*/ $constructor("$ZodObject", (inst, def) => {
+    // requires cast because technically $ZodObject doesn't extend
+    $ZodType.init(inst, def);
+    const _normalized = cached(() => {
+        const keys = Object.keys(def.shape);
+        for (const k of keys) {
+            if (!(def.shape[k] instanceof $ZodType)) {
+                throw new Error(`Invalid element at key "${k}": expected a Zod schema`);
+            }
+        }
+        const okeys = optionalKeys(def.shape);
+        return {
+            shape: def.shape,
+            keys,
+            keySet: new Set(keys),
+            numKeys: keys.length,
+            optionalKeys: new Set(okeys),
+        };
+    });
+    defineLazy(inst._zod, "propValues", () => {
+        const shape = def.shape;
+        const propValues = {};
+        for (const key in shape) {
+            const field = shape[key]._zod;
+            if (field.values) {
+                propValues[key] ?? (propValues[key] = new Set());
+                for (const v of field.values)
+                    propValues[key].add(v);
+            }
+        }
+        return propValues;
+    });
+    const generateFastpass = (shape) => {
+        const doc = new Doc(["shape", "payload", "ctx"]);
+        const normalized = _normalized.value;
+        const parseStr = (key) => {
+            const k = esc(key);
+            return `shape[${k}]._zod.run({ value: input[${k}], issues: [] }, ctx)`;
+        };
+        doc.write(`const input = payload.value;`);
+        const ids = Object.create(null);
+        let counter = 0;
+        for (const key of normalized.keys) {
+            ids[key] = `key_${counter++}`;
+        }
+        // A: preserve key order {
+        doc.write(`const newResult = {}`);
+        for (const key of normalized.keys) {
+            if (normalized.optionalKeys.has(key)) {
+                const id = ids[key];
+                doc.write(`const ${id} = ${parseStr(key)};`);
+                const k = esc(key);
+                doc.write(`
+        if (${id}.issues.length) {
+          if (input[${k}] === undefined) {
+            if (${k} in input) {
+              newResult[${k}] = undefined;
+            }
+          } else {
+            payload.issues = payload.issues.concat(
+              ${id}.issues.map((iss) => ({
+                ...iss,
+                path: iss.path ? [${k}, ...iss.path] : [${k}],
+              }))
+            );
+          }
+        } else if (${id}.value === undefined) {
+          if (${k} in input) newResult[${k}] = undefined;
+        } else {
+          newResult[${k}] = ${id}.value;
+        }
+        `);
+            }
+            else {
+                const id = ids[key];
+                //  const id = ids[key];
+                doc.write(`const ${id} = ${parseStr(key)};`);
+                doc.write(`
+          if (${id}.issues.length) payload.issues = payload.issues.concat(${id}.issues.map(iss => ({
+            ...iss,
+            path: iss.path ? [${esc(key)}, ...iss.path] : [${esc(key)}]
+          })));`);
+                doc.write(`newResult[${esc(key)}] = ${id}.value`);
+            }
+        }
+        doc.write(`payload.value = newResult;`);
+        doc.write(`return payload;`);
+        const fn = doc.compile();
+        return (payload, ctx) => fn(shape, payload, ctx);
+    };
+    let fastpass;
+    const isObject$1 = isObject;
+    const jit = !globalConfig.jitless;
+    const allowsEval$1 = allowsEval;
+    const fastEnabled = jit && allowsEval$1.value; // && !def.catchall;
+    const catchall = def.catchall;
+    let value;
+    inst._zod.parse = (payload, ctx) => {
+        value ?? (value = _normalized.value);
+        const input = payload.value;
+        if (!isObject$1(input)) {
+            payload.issues.push({
+                expected: "object",
+                code: "invalid_type",
+                input,
+                inst,
+            });
+            return payload;
+        }
+        const proms = [];
+        if (jit && fastEnabled && ctx?.async === false && ctx.jitless !== true) {
+            // always synchronous
+            if (!fastpass)
+                fastpass = generateFastpass(def.shape);
+            payload = fastpass(payload, ctx);
+        }
+        else {
+            payload.value = {};
+            const shape = value.shape;
+            for (const key of value.keys) {
+                const el = shape[key];
+                // do not add omitted optional keys
+                // if (!(key in input)) {
+                //   if (optionalKeys.has(key)) continue;
+                //   payload.issues.push({
+                //     code: "invalid_type",
+                //     path: [key],
+                //     expected: "nonoptional",
+                //     note: `Missing required key: "${key}"`,
+                //     input,
+                //     inst,
+                //   });
+                // }
+                const r = el._zod.run({ value: input[key], issues: [] }, ctx);
+                const isOptional = el._zod.optin === "optional" && el._zod.optout === "optional";
+                if (r instanceof Promise) {
+                    proms.push(r.then((r) => isOptional ? handleOptionalObjectResult(r, payload, key, input) : handleObjectResult(r, payload, key)));
+                }
+                else if (isOptional) {
+                    handleOptionalObjectResult(r, payload, key, input);
+                }
+                else {
+                    handleObjectResult(r, payload, key);
+                }
+            }
+        }
+        if (!catchall) {
+            // return payload;
+            return proms.length ? Promise.all(proms).then(() => payload) : payload;
+        }
+        const unrecognized = [];
+        // iterate over input keys
+        const keySet = value.keySet;
+        const _catchall = catchall._zod;
+        const t = _catchall.def.type;
+        for (const key of Object.keys(input)) {
+            if (keySet.has(key))
+                continue;
+            if (t === "never") {
+                unrecognized.push(key);
+                continue;
+            }
+            const r = _catchall.run({ value: input[key], issues: [] }, ctx);
+            if (r instanceof Promise) {
+                proms.push(r.then((r) => handleObjectResult(r, payload, key)));
+            }
+            else {
+                handleObjectResult(r, payload, key);
+            }
+        }
+        if (unrecognized.length) {
+            payload.issues.push({
+                code: "unrecognized_keys",
+                keys: unrecognized,
+                input,
+                inst,
+            });
+        }
+        if (!proms.length)
+            return payload;
+        return Promise.all(proms).then(() => {
+            return payload;
+        });
+    };
+});
+function handleUnionResults(results, final, inst, ctx) {
+    for (const result of results) {
+        if (result.issues.length === 0) {
+            final.value = result.value;
+            return final;
+        }
+    }
+    final.issues.push({
+        code: "invalid_union",
+        input: final.value,
+        inst,
+        errors: results.map((result) => result.issues.map((iss) => finalizeIssue(iss, ctx, config()))),
+    });
+    return final;
+}
+const $ZodUnion = /*@__PURE__*/ $constructor("$ZodUnion", (inst, def) => {
+    $ZodType.init(inst, def);
+    defineLazy(inst._zod, "optin", () => def.options.some((o) => o._zod.optin === "optional") ? "optional" : undefined);
+    defineLazy(inst._zod, "optout", () => def.options.some((o) => o._zod.optout === "optional") ? "optional" : undefined);
+    defineLazy(inst._zod, "values", () => {
+        if (def.options.every((o) => o._zod.values)) {
+            return new Set(def.options.flatMap((option) => Array.from(option._zod.values)));
+        }
+        return undefined;
+    });
+    defineLazy(inst._zod, "pattern", () => {
+        if (def.options.every((o) => o._zod.pattern)) {
+            const patterns = def.options.map((o) => o._zod.pattern);
+            return new RegExp(`^(${patterns.map((p) => cleanRegex(p.source)).join("|")})$`);
+        }
+        return undefined;
+    });
+    inst._zod.parse = (payload, ctx) => {
+        let async = false;
+        const results = [];
+        for (const option of def.options) {
+            const result = option._zod.run({
+                value: payload.value,
+                issues: [],
+            }, ctx);
+            if (result instanceof Promise) {
+                results.push(result);
+                async = true;
+            }
+            else {
+                if (result.issues.length === 0)
+                    return result;
+                results.push(result);
+            }
+        }
+        if (!async)
+            return handleUnionResults(results, payload, inst, ctx);
+        return Promise.all(results).then((results) => {
+            return handleUnionResults(results, payload, inst, ctx);
+        });
+    };
+});
+const $ZodLiteral = /*@__PURE__*/ $constructor("$ZodLiteral", (inst, def) => {
+    $ZodType.init(inst, def);
+    inst._zod.values = new Set(def.values);
+    inst._zod.pattern = new RegExp(`^(${def.values
+        .map((o) => (typeof o === "string" ? escapeRegex(o) : o ? o.toString() : String(o)))
+        .join("|")})$`);
+    inst._zod.parse = (payload, _ctx) => {
+        const input = payload.value;
+        if (inst._zod.values.has(input)) {
+            return payload;
+        }
+        payload.issues.push({
+            code: "invalid_value",
+            values: def.values,
+            input,
+            inst,
+        });
+        return payload;
+    };
+});
+const $ZodOptional = /*@__PURE__*/ $constructor("$ZodOptional", (inst, def) => {
+    $ZodType.init(inst, def);
+    inst._zod.optin = "optional";
+    inst._zod.optout = "optional";
+    defineLazy(inst._zod, "values", () => {
+        return def.innerType._zod.values ? new Set([...def.innerType._zod.values, undefined]) : undefined;
+    });
+    defineLazy(inst._zod, "pattern", () => {
+        const pattern = def.innerType._zod.pattern;
+        return pattern ? new RegExp(`^(${cleanRegex(pattern.source)})?$`) : undefined;
+    });
+    inst._zod.parse = (payload, ctx) => {
+        if (def.innerType._zod.optin === "optional") {
+            return def.innerType._zod.run(payload, ctx);
+        }
+        if (payload.value === undefined) {
+            return payload;
+        }
+        return def.innerType._zod.run(payload, ctx);
+    };
+});
+const $ZodLazy = /*@__PURE__*/ $constructor("$ZodLazy", (inst, def) => {
+    $ZodType.init(inst, def);
+    defineLazy(inst._zod, "innerType", () => def.getter());
+    defineLazy(inst._zod, "pattern", () => inst._zod.innerType._zod.pattern);
+    defineLazy(inst._zod, "propValues", () => inst._zod.innerType._zod.propValues);
+    defineLazy(inst._zod, "optin", () => inst._zod.innerType._zod.optin);
+    defineLazy(inst._zod, "optout", () => inst._zod.innerType._zod.optout);
+    inst._zod.parse = (payload, ctx) => {
+        const inner = inst._zod.innerType;
+        return inner._zod.run(payload, ctx);
+    };
+});
+
+function _string(Class, params) {
+    return new Class({
+        type: "string",
+        ...normalizeParams(),
+    });
+}
+function _number(Class, params) {
+    return new Class({
+        type: "number",
+        checks: [],
+        ...normalizeParams(),
+    });
+}
+function _boolean(Class, params) {
+    return new Class({
+        type: "boolean",
+        ...normalizeParams(),
+    });
+}
+
+const ZodMiniType = /*@__PURE__*/ $constructor("ZodMiniType", (inst, def) => {
+    if (!inst._zod)
+        throw new Error("Uninitialized schema in ZodMiniType.");
+    $ZodType.init(inst, def);
+    inst.def = def;
+    inst.parse = (data, params) => parse(inst, data, params, { callee: inst.parse });
+    inst.safeParse = (data, params) => safeParse(inst, data, params);
+    inst.parseAsync = async (data, params) => parseAsync(inst, data, params, { callee: inst.parseAsync });
+    inst.safeParseAsync = async (data, params) => safeParseAsync(inst, data, params);
+    inst.check = (...checks) => {
+        return inst.clone({
+            ...def,
+            checks: [
+                ...(def.checks ?? []),
+                ...checks.map((ch) => typeof ch === "function" ? { _zod: { check: ch, def: { check: "custom" }, onattach: [] } } : ch),
+            ],
+        }
+        // { parent: true }
+        );
+    };
+    inst.clone = (_def, params) => clone(inst, _def, params);
+    inst.brand = () => inst;
+    inst.register = ((reg, meta) => {
+        reg.add(inst, meta);
+        return inst;
+    });
+});
+const ZodMiniString = /*@__PURE__*/ $constructor("ZodMiniString", (inst, def) => {
+    $ZodString.init(inst, def);
+    ZodMiniType.init(inst, def);
+});
+function string(params) {
+    return _string(ZodMiniString);
+}
+const ZodMiniNumber = /*@__PURE__*/ $constructor("ZodMiniNumber", (inst, def) => {
+    $ZodNumber.init(inst, def);
+    ZodMiniType.init(inst, def);
+});
+function number(params) {
+    return _number(ZodMiniNumber);
+}
+const ZodMiniBoolean = /*@__PURE__*/ $constructor("ZodMiniBoolean", (inst, def) => {
+    $ZodBoolean.init(inst, def);
+    ZodMiniType.init(inst, def);
+});
+function boolean(params) {
+    return _boolean(ZodMiniBoolean);
+}
+const ZodMiniArray = /*@__PURE__*/ $constructor("ZodMiniArray", (inst, def) => {
+    $ZodArray.init(inst, def);
+    ZodMiniType.init(inst, def);
+});
+function array(element, params) {
+    return new ZodMiniArray({
+        type: "array",
+        element: element,
+        ...normalizeParams(),
+    });
+}
+const ZodMiniObject = /*@__PURE__*/ $constructor("ZodMiniObject", (inst, def) => {
+    $ZodObject.init(inst, def);
+    ZodMiniType.init(inst, def);
+    defineLazy(inst, "shape", () => def.shape);
+});
+function object(shape, params) {
+    const def = {
+        type: "object",
+        get shape() {
+            assignProp(this, "shape", { ...shape });
+            return this.shape;
+        },
+        ...normalizeParams(),
+    };
+    return new ZodMiniObject(def);
+}
+const ZodMiniUnion = /*@__PURE__*/ $constructor("ZodMiniUnion", (inst, def) => {
+    $ZodUnion.init(inst, def);
+    ZodMiniType.init(inst, def);
+});
+function union(options, params) {
+    return new ZodMiniUnion({
+        type: "union",
+        options: options,
+        ...normalizeParams(),
+    });
+}
+const ZodMiniLiteral = /*@__PURE__*/ $constructor("ZodMiniLiteral", (inst, def) => {
+    $ZodLiteral.init(inst, def);
+    ZodMiniType.init(inst, def);
+});
+function literal(value, params) {
+    return new ZodMiniLiteral({
+        type: "literal",
+        values: Array.isArray(value) ? value : [value],
+        ...normalizeParams(),
+    });
+}
+const ZodMiniOptional = /*@__PURE__*/ $constructor("ZodMiniOptional", (inst, def) => {
+    $ZodOptional.init(inst, def);
+    ZodMiniType.init(inst, def);
+});
+function optional(innerType) {
+    return new ZodMiniOptional({
+        type: "optional",
+        innerType: innerType,
+    });
+}
+const ZodMiniLazy = /*@__PURE__*/ $constructor("ZodMiniLazy", (inst, def) => {
+    $ZodLazy.init(inst, def);
+    ZodMiniType.init(inst, def);
+});
+// export function lazy<T extends object>(getter: () => T): T {
+//   return util.createTransparentProxy<T>(getter);
+// }
+function _lazy(getter) {
+    return new ZodMiniLazy({
+        type: "lazy",
+        getter: getter,
+    });
+}
+
+/**
+ * Serializable structure that represents an option.
+ */
+const Option = object({
+    type: literal("option"),
+    disabled: optional(boolean()),
+    label: string(),
+    value: union([boolean(), number(), string()]),
+});
+
+/**
+ * Serializable structure that represents a group of options.
+ */
+const OptionGroup = object({
+    type: literal("option-group"),
+    disabled: optional(boolean()),
+    options: _lazy(() => array(union([Option, OptionGroup]))),
+    label: string(),
+});
+
 function getDefaultExportFromCjs (x) {
 	return x && x.__esModule && Object.prototype.hasOwnProperty.call(x, 'default') ? x['default'] : x;
 }
@@ -988,6 +1991,9 @@ function requirePermessageDeflate () {
 	   *     acknowledge disabling of client context takeover
 	   * @param {Number} [options.concurrencyLimit=10] The number of concurrent
 	   *     calls to zlib
+	   * @param {Boolean} [options.isServer=false] Create the instance in either
+	   *     server or client mode
+	   * @param {Number} [options.maxPayload=0] The maximum allowed message length
 	   * @param {(Boolean|Number)} [options.serverMaxWindowBits] Request/confirm the
 	   *     use of a custom server window size
 	   * @param {Boolean} [options.serverNoContextTakeover=false] Request/accept
@@ -998,16 +2004,13 @@ function requirePermessageDeflate () {
 	   *     deflate
 	   * @param {Object} [options.zlibInflateOptions] Options to pass to zlib on
 	   *     inflate
-	   * @param {Boolean} [isServer=false] Create the instance in either server or
-	   *     client mode
-	   * @param {Number} [maxPayload=0] The maximum allowed message length
 	   */
-	  constructor(options, isServer, maxPayload) {
-	    this._maxPayload = maxPayload | 0;
+	  constructor(options) {
 	    this._options = options || {};
 	    this._threshold =
 	      this._options.threshold !== undefined ? this._options.threshold : 1024;
-	    this._isServer = !!isServer;
+	    this._maxPayload = this._options.maxPayload | 0;
+	    this._isServer = !!this._options.isServer;
 	    this._deflate = null;
 	    this._inflate = null;
 
@@ -1118,7 +2121,9 @@ function requirePermessageDeflate () {
 	            (typeof opts.serverMaxWindowBits === 'number' &&
 	              opts.serverMaxWindowBits > params.server_max_window_bits))) ||
 	        (typeof opts.clientMaxWindowBits === 'number' &&
-	          !params.client_max_window_bits)
+	          (typeof params.client_max_window_bits === 'number'
+	            ? opts.clientMaxWindowBits > params.client_max_window_bits
+	            : !params.client_max_window_bits))
 	      ) {
 	        return false;
 	      }
@@ -1688,6 +2693,10 @@ function requireReceiver () {
 	   *     extensions
 	   * @param {Boolean} [options.isServer=false] Specifies whether to operate in
 	   *     client or server mode
+	   * @param {Number} [options.maxBufferedChunks=0] The maximum number of
+	   *     buffered data chunks
+	   * @param {Number} [options.maxFragments=0] The maximum number of message
+	   *     fragments
 	   * @param {Number} [options.maxPayload=0] The maximum allowed message length
 	   * @param {Boolean} [options.skipUTF8Validation=false] Specifies whether or
 	   *     not to skip UTF-8 validation for text and close messages
@@ -1702,6 +2711,8 @@ function requireReceiver () {
 	    this._binaryType = options.binaryType || BINARY_TYPES[0];
 	    this._extensions = options.extensions || {};
 	    this._isServer = !!options.isServer;
+	    this._maxBufferedChunks = options.maxBufferedChunks | 0;
+	    this._maxFragments = options.maxFragments | 0;
 	    this._maxPayload = options.maxPayload | 0;
 	    this._skipUTF8Validation = !!options.skipUTF8Validation;
 	    this[kWebSocket] = undefined;
@@ -1719,6 +2730,7 @@ function requireReceiver () {
 
 	    this._totalPayloadLength = 0;
 	    this._messageLength = 0;
+	    this._numFragments = 0;
 	    this._fragments = [];
 
 	    this._errored = false;
@@ -1736,6 +2748,22 @@ function requireReceiver () {
 	   */
 	  _write(chunk, encoding, cb) {
 	    if (this._opcode === 0x08 && this._state == GET_INFO) return cb();
+
+	    if (
+	      this._maxBufferedChunks > 0 &&
+	      this._buffers.length >= this._maxBufferedChunks
+	    ) {
+	      cb(
+	        this.createError(
+	          RangeError,
+	          'Too many buffered chunks',
+	          false,
+	          1008,
+	          'WS_ERR_TOO_MANY_BUFFERED_PARTS'
+	        )
+	      );
+	      return;
+	    }
 
 	    this._bufferedBytes += chunk.length;
 	    this._buffers.push(chunk);
@@ -2126,6 +3154,19 @@ function requireReceiver () {
 	      return;
 	    }
 
+	    if (this._maxFragments > 0 && ++this._numFragments > this._maxFragments) {
+	      const error = this.createError(
+	        RangeError,
+	        'Too many message fragments',
+	        false,
+	        1008,
+	        'WS_ERR_TOO_MANY_BUFFERED_PARTS'
+	      );
+
+	      cb(error);
+	      return;
+	    }
+
 	    if (this._compressed) {
 	      this._state = INFLATING;
 	      this.decompress(data, cb);
@@ -2198,6 +3239,7 @@ function requireReceiver () {
 	    this._totalPayloadLength = 0;
 	    this._messageLength = 0;
 	    this._fragmented = 0;
+	    this._numFragments = 0;
 	    this._fragments = [];
 
 	    if (this._opcode === 2) {
@@ -2366,6 +3408,9 @@ function requireSender () {
 
 	const { Duplex } = require$$0$2;
 	const { randomFillSync } = require$$1;
+	const {
+	  types: { isUint8Array }
+	} = require$$2;
 
 	const PerMessageDeflate = requirePermessageDeflate();
 	const { EMPTY_BUFFER, kWebSocket, NOOP } = requireConstants();
@@ -2562,8 +3607,10 @@ function requireSender () {
 
 	      if (typeof data === 'string') {
 	        buf.write(data, 2);
-	      } else {
+	      } else if (isUint8Array(data)) {
 	        buf.set(data, 2);
+	      } else {
+	        throw new TypeError('Second argument must be a string or a Uint8Array');
 	      }
 	    }
 
@@ -3487,7 +4534,7 @@ function requireWebsocket () {
 
 	const EventEmitter = require$$0$3;
 	const https = require$$1$1;
-	const http = require$$2;
+	const http = require$$2$1;
 	const net = require$$3;
 	const tls = require$$4;
 	const { randomBytes, createHash } = require$$1;
@@ -3684,6 +4731,10 @@ function requireWebsocket () {
 	   *     multiple times in the same tick
 	   * @param {Function} [options.generateMask] The function used to generate the
 	   *     masking key
+	   * @param {Number} [options.maxBufferedChunks=0] The maximum number of
+	   *     buffered data chunks
+	   * @param {Number} [options.maxFragments=0] The maximum number of message
+	   *     fragments
 	   * @param {Number} [options.maxPayload=0] The maximum allowed message size
 	   * @param {Boolean} [options.skipUTF8Validation=false] Specifies whether or
 	   *     not to skip UTF-8 validation for text and close messages
@@ -3695,6 +4746,8 @@ function requireWebsocket () {
 	      binaryType: this.binaryType,
 	      extensions: this._extensions,
 	      isServer: this._isServer,
+	      maxBufferedChunks: options.maxBufferedChunks,
+	      maxFragments: options.maxFragments,
 	      maxPayload: options.maxPayload,
 	      skipUTF8Validation: options.skipUTF8Validation
 	    });
@@ -4123,6 +5176,10 @@ function requireWebsocket () {
 	 *     masking key
 	 * @param {Number} [options.handshakeTimeout] Timeout in milliseconds for the
 	 *     handshake request
+	 * @param {Number} [options.maxBufferedChunks=262144] The maximum number of
+	 *     buffered data chunks
+	 * @param {Number} [options.maxFragments=16384] The maximum number of message
+	 *     fragments
 	 * @param {Number} [options.maxPayload=104857600] The maximum allowed message
 	 *     size
 	 * @param {Number} [options.maxRedirects=10] The maximum number of redirects
@@ -4143,6 +5200,8 @@ function requireWebsocket () {
 	    autoPong: true,
 	    closeTimeout: CLOSE_TIMEOUT,
 	    protocolVersion: protocolVersions[1],
+	    maxBufferedChunks: 256 * 1024,
+	    maxFragments: 16 * 1024,
 	    maxPayload: 100 * 1024 * 1024,
 	    skipUTF8Validation: false,
 	    perMessageDeflate: true,
@@ -4176,7 +5235,7 @@ function requireWebsocket () {
 	  } else {
 	    try {
 	      parsedUrl = new URL(address);
-	    } catch (e) {
+	    } catch {
 	      throw new SyntaxError(`Invalid URL: ${address}`);
 	    }
 	  }
@@ -4238,11 +5297,11 @@ function requireWebsocket () {
 	  opts.timeout = opts.handshakeTimeout;
 
 	  if (opts.perMessageDeflate) {
-	    perMessageDeflate = new PerMessageDeflate(
-	      opts.perMessageDeflate !== true ? opts.perMessageDeflate : {},
-	      false,
-	      opts.maxPayload
-	    );
+	    perMessageDeflate = new PerMessageDeflate({
+	      ...opts.perMessageDeflate,
+	      isServer: false,
+	      maxPayload: opts.maxPayload
+	    });
 	    opts.headers['Sec-WebSocket-Extensions'] = format({
 	      [PerMessageDeflate.extensionName]: perMessageDeflate.offer()
 	    });
@@ -4500,6 +5559,8 @@ function requireWebsocket () {
 	    websocket.setSocket(socket, head, {
 	      allowSynchronousEvents: opts.allowSynchronousEvents,
 	      generateMask: opts.generateMask,
+	      maxBufferedChunks: opts.maxBufferedChunks,
+	      maxFragments: opts.maxFragments,
 	      maxPayload: opts.maxPayload,
 	      skipUTF8Validation: opts.skipUTF8Validation
 	    });
@@ -5049,12 +6110,13 @@ function requireStream () {
 
 requireStream();
 
+requireExtension();
+
+requirePermessageDeflate();
+
 requireReceiver();
 
 requireSender();
-
-var websocketExports = requireWebsocket();
-var WebSocket = /*@__PURE__*/getDefaultExportFromCjs(websocketExports);
 
 var subprotocol;
 var hasRequiredSubprotocol;
@@ -5126,6 +6188,11 @@ function requireSubprotocol () {
 	return subprotocol;
 }
 
+requireSubprotocol();
+
+var websocketExports = requireWebsocket();
+var WebSocket = /*@__PURE__*/getDefaultExportFromCjs(websocketExports);
+
 /* eslint no-unused-vars: ["error", { "varsIgnorePattern": "^Duplex$", "caughtErrors": "none" }] */
 
 var websocketServer;
@@ -5136,7 +6203,7 @@ function requireWebsocketServer () {
 	hasRequiredWebsocketServer = 1;
 
 	const EventEmitter = require$$0$3;
-	const http = require$$2;
+	const http = require$$2$1;
 	const { Duplex } = require$$0$2;
 	const { createHash } = require$$1;
 
@@ -5176,6 +6243,10 @@ function requireWebsocketServer () {
 	   *     called
 	   * @param {Function} [options.handleProtocols] A hook to handle protocols
 	   * @param {String} [options.host] The hostname where to bind the server
+	   * @param {Number} [options.maxBufferedChunks=262144] The maximum number of
+	   *     buffered data chunks
+	   * @param {Number} [options.maxFragments=16384] The maximum number of message
+	   *     fragments
 	   * @param {Number} [options.maxPayload=104857600] The maximum allowed message
 	   *     size
 	   * @param {Boolean} [options.noServer=false] Enable no server mode
@@ -5198,6 +6269,8 @@ function requireWebsocketServer () {
 	    options = {
 	      allowSynchronousEvents: true,
 	      autoPong: true,
+	      maxBufferedChunks: 256 * 1024,
+	      maxFragments: 16 * 1024,
 	      maxPayload: 100 * 1024 * 1024,
 	      skipUTF8Validation: false,
 	      perMessageDeflate: false,
@@ -5426,11 +6499,11 @@ function requireWebsocketServer () {
 	      this.options.perMessageDeflate &&
 	      secWebSocketExtensions !== undefined
 	    ) {
-	      const perMessageDeflate = new PerMessageDeflate(
-	        this.options.perMessageDeflate,
-	        true,
-	        this.options.maxPayload
-	      );
+	      const perMessageDeflate = new PerMessageDeflate({
+	        ...this.options.perMessageDeflate,
+	        isServer: true,
+	        maxPayload: this.options.maxPayload
+	      });
 
 	      try {
 	        const offers = extension.parse(secWebSocketExtensions);
@@ -5557,6 +6630,8 @@ function requireWebsocketServer () {
 
 	    ws.setSocket(socket, head, {
 	      allowSynchronousEvents: this.options.allowSynchronousEvents,
+	      maxBufferedChunks: this.options.maxBufferedChunks,
+	      maxFragments: this.options.maxFragments,
 	      maxPayload: this.options.maxPayload,
 	      skipUTF8Validation: this.options.skipUTF8Validation
 	    });
@@ -5749,6 +6824,14 @@ var DeviceType;
      * Virtual Stream Deck, comprised of 1 to 64 action (on-screen) on a scalable canvas, with a maximum layout of 8 x 8.
      */
     DeviceType[DeviceType["VirtualStreamDeck"] = 11] = "VirtualStreamDeck";
+    /**
+     * High-performance gaming keyboard, with a built-in Stream Deck comprised of 12 customizable LCD keys in a 3 x 4 layout, an LCD screen, and 2 dials.
+     */
+    DeviceType[DeviceType["Galleon100SD"] = 12] = "Galleon100SD";
+    /**
+     * Stream Deck + XL, comprised of 36 customizable LCD keys in a 9 x 4 layout, a touch strip, and 6 dials.
+     */
+    DeviceType[DeviceType["StreamDeckPlusXL"] = 13] = "StreamDeckPlusXL";
 })(DeviceType || (DeviceType = {}));
 
 /**
@@ -6172,13 +7255,16 @@ class FileTarget {
         });
     }
     /**
-     * Re-indexes the existing log files associated with this file target, removing old log files whose index exceeds the {@link FileTargetOptions.maxFileCount}, and renaming the
-     * remaining log files, leaving index "0" free for a new log file.
+     * Re-indexes the existing log files associated with this file target, removing old log files whose
+     * index exceeds the `maxFileCount`, and renaming the remaining log files, leaving index "0" free
+     * for a new log file.
      */
     reIndex() {
         // When the destination directory is new, create it, and return.
         if (!fs.existsSync(this.#options.dest)) {
-            fs.mkdirSync(this.#options.dest);
+            fs.mkdirSync(this.#options.dest, {
+                recursive: true,
+            });
             return;
         }
         const logFiles = this.getLogFiles();
@@ -6486,6 +7572,16 @@ function getManifest() {
     return manifest$1.value;
 }
 
+/**
+ * Configuration shared by action components that must not depend on the plugin settings module.
+ */
+const actionConfig = {
+    /**
+     * Determines whether settings requests should use message identifiers and action settings cache behavior.
+     */
+    useExperimentalMessageIdentifiers: false,
+};
+
 const __items$1 = new Map();
 /**
  * Provides a read-only store of Stream Deck devices.
@@ -6707,7 +7803,6 @@ function requiresVersion(minimumVersion, streamDeckVersion, feature) {
     }
 }
 
-let __useExperimentalMessageIdentifiers = false;
 const settings = {
     /**
      * Available from Stream Deck 7.1; determines whether message identifiers should be sent when getting
@@ -6718,7 +7813,7 @@ const settings = {
      * @returns The value.
      */
     get useExperimentalMessageIdentifiers() {
-        return __useExperimentalMessageIdentifiers;
+        return actionConfig.useExperimentalMessageIdentifiers;
     },
     /**
      * Available from Stream Deck 7.1; determines whether message identifiers should be sent when getting
@@ -6729,7 +7824,7 @@ const settings = {
      */
     set useExperimentalMessageIdentifiers(value) {
         requiresVersion(7.1, connection.version, "Message identifiers");
-        __useExperimentalMessageIdentifiers = value;
+        actionConfig.useExperimentalMessageIdentifiers = value;
     },
     /**
      * Gets the global settings associated with the plugin.
@@ -6915,6 +8010,44 @@ class UIController {
 }
 const ui = new UIController();
 
+/**
+ * Provides a cache for action settings, keyed by action instance identifier.
+ */
+class SettingsCache {
+    /**
+     * Underlying map of action ID to cached settings.
+     */
+    #entries = new Map();
+    /**
+     * Removes the cached settings for the specified action.
+     * @param id Action instance identifier.
+     */
+    delete(id) {
+        this.#entries.delete(id);
+    }
+    /**
+     * Gets the cached settings for the specified action.
+     * @param id Action instance identifier.
+     * @returns The cached settings when present; otherwise `undefined`.
+     */
+    get(id) {
+        const settings = this.#entries.get(id);
+        return settings !== undefined ? structuredClone(settings) : undefined;
+    }
+    /**
+     * Sets the cached settings for the specified action.
+     * @param id Action instance identifier.
+     * @param settings The settings to cache.
+     */
+    set(id, settings) {
+        this.#entries.set(id, structuredClone(settings));
+    }
+}
+/**
+ * Singleton instance of the settings cache.
+ */
+const settingsCache = new SettingsCache();
+
 const __items = new Map();
 /**
  * Provides a read-only store of Stream Deck devices.
@@ -7044,6 +8177,18 @@ class Action extends ActionContext {
      * @returns Promise containing the action instance's settings.
      */
     async getSettings() {
+        if (actionConfig.useExperimentalMessageIdentifiers) {
+            const cached = settingsCache.get(this.id);
+            if (cached !== undefined) {
+                logger.trace(JSON.stringify({
+                    event: "getSettings",
+                    context: this.id,
+                    source: "cache",
+                    settings: cached,
+                }));
+                return cached;
+            }
+        }
         const res = await this.#fetch("getSettings", "didReceiveSettings");
         return res.payload.settings;
     }
@@ -7083,15 +8228,16 @@ class Action extends ActionContext {
         });
     }
     /**
-     * Sets the {@link settings} associated with this action instance. Use in conjunction with {@link Action.getSettings}.
-     * @param settings Settings to persist.
-     * @returns `Promise` resolved when the {@link settings} are sent to Stream Deck.
+     * Sets the settings associated with this action instance. Use in conjunction with {@link Action.getSettings}.
+     * @param value Settings to persist.
+     * @returns `Promise` resolved when the settings are sent to Stream Deck.
      */
-    setSettings(settings) {
+    setSettings(value) {
+        settingsCache.delete(this.id);
         return connection.send({
             event: "setSettings",
             context: this.id,
-            payload: settings,
+            payload: value,
         });
     }
     /**
@@ -7375,9 +8521,21 @@ class ActionService extends ReadOnlyActionStore {
         connection.prependListener("willAppear", (ev) => {
             const action = ev.payload.controller === "Encoder" ? new DialAction(ev) : new KeyAction(ev);
             actionStore.set(action);
+            if (actionConfig.useExperimentalMessageIdentifiers) {
+                settingsCache.set(ev.context, ev.payload.settings);
+            }
+        });
+        // Update the settings cache when settings are received.
+        connection.prependListener("didReceiveSettings", (ev) => {
+            if (actionConfig.useExperimentalMessageIdentifiers) {
+                settingsCache.set(ev.context, ev.payload.settings);
+            }
         });
         // Remove the action from the store.
-        connection.prependListener("willDisappear", (ev) => actionStore.delete(ev.context));
+        connection.prependListener("willDisappear", (ev) => {
+            actionStore.delete(ev.context);
+            settingsCache.delete(ev.context);
+        });
     }
     /**
      * Occurs when the user presses a dial (Stream Deck +).
@@ -8021,6 +9179,78 @@ typeof SuppressedError === "function" ? SuppressedError : function (error, suppr
     return e.name = "SuppressedError", e.error = error, e.suppressed = suppressed, e;
 };
 
+const API_BASE = "https://tarkovbot.eu/api";
+const ENDPOINTS = {
+    GOONS_LOCATION: `${API_BASE}/streamdeck/goonslocation`,
+    TRADER_RESETS_PVP: `${API_BASE}/streamdeck/trader-resets`,
+    TRADER_RESETS_PVE: `${API_BASE}/pve/streamdeck/trader-resets`,
+    TRADER_RESETS_SEASON: `${API_BASE}/season/streamdeck/trader-resets`,
+    MAPS_PVP: `${API_BASE}/streamdeck/maps`,
+    MAPS_PVE: `${API_BASE}/pve/streamdeck/maps`,
+    MAPS_SEASON: `${API_BASE}/season/streamdeck/maps`,
+    LOCAL_MAP_NAMES: `${API_BASE}/pve/streamdeck/local-map-names`,
+    DATACENTERS: `${API_BASE}/streamdeck/v2/eft-datacenters`,
+};
+function traderResetsEndpoint(mode) {
+    switch (mode) {
+        case "PVE":
+            return ENDPOINTS.TRADER_RESETS_PVE;
+        case "SEASON":
+            return ENDPOINTS.TRADER_RESETS_SEASON;
+        case "PVP":
+        default:
+            return ENDPOINTS.TRADER_RESETS_PVP;
+    }
+}
+function mapsEndpoint(mode) {
+    switch (mode) {
+        case "PVE":
+            return ENDPOINTS.MAPS_PVE;
+        case "SEASON":
+            return ENDPOINTS.MAPS_SEASON;
+        case "PVP":
+        default:
+            return ENDPOINTS.MAPS_PVP;
+    }
+}
+const BOSS_IMAGE_BASE = "https://tarkovbot.eu/streamdeck/img";
+const BOSS_IMAGE_FALLBACK = `${BOSS_IMAGE_BASE}/unknown_boss.webp`;
+const URL_PATREON = "https://patreon.com/tarkovboteu";
+const URL_WEBSITE = "https://tarkovbot.eu/stream-deck";
+const INTERVALS = {
+    TARKOV_TIME: 2_000,
+    MAP_INFO_AUTO_UPDATE: 5_000,
+    MAP_DISCOVERY: 10_000,
+    TRADER_RESTOCK: 1_000,
+    MAP_DATA_REFRESH: 1_200_000,
+    TRADER_DATA_REFRESH: 60_000,
+    DATACENTER_REFRESH: 3_600_000,
+    GOONS_AUTO_REFRESH: 300_000,
+};
+const TARKOV_TIME_MULTIPLIER = 7;
+const TARKOV_TIME_OFFSET_MS = 12 * 60 * 60 * 1000;
+const TARKOV_TIMEZONE = "Europe/Moscow";
+const SETTINGS_FILE_PATH = path.join(process.cwd(), "user_settings.json");
+const DEFAULT_USER_SETTINGS = Object.freeze({
+    map_autoupdate_check: false,
+    game_mode: "PVP",
+    raid_autoupdate_check: false,
+    eftInstallPath: "",
+});
+const DEVICE_PROFILE_MAP = {
+    0: "Map Info MK V2",
+    1: "Map Info Mini V2",
+    2: "Map Info XL V2",
+    3: "Map Info MK V2",
+    7: "Map Info Neo V2",
+    9: "Map Info Neo V2",
+};
+const LOG_REGEX_LOCATION = /Location:\s(\w+),/;
+const LOG_REGEX_SCENE_PRESET = /rcid:([\w_]+)\.ScenesPreset\.asset/i;
+const LOG_REGEX_SID = /Sid:\s([^_]+)_/;
+const LOG_REGEX_FOLDER_TIMESTAMP = /^log_(\d{4})\.(\d{2})\.(\d{2})_(\d{1,2})-(\d{1,2})-(\d{1,2})/;
+const LOG_APP_FILE_FRAGMENT = "application";
+
 let TarkovTime = (() => {
     let _classDecorators = [action({ UUID: "eu.tarkovbot.tools.tarkovtime" })];
     let _classDescriptor;
@@ -8036,33 +9266,72 @@ let TarkovTime = (() => {
             if (_metadata) Object.defineProperty(_classThis, Symbol.metadata, { enumerable: true, configurable: true, writable: true, value: _metadata });
             __runInitializers(_classThis, _classExtraInitializers);
         }
-        updateInterval;
+        timer = null;
         onWillAppear(ev) {
-            const updateTarkovTime = () => {
-                const currentDateTime = new Date();
-                const multiplier = 7;
-                const tarkovTimeLeft = new Date(currentDateTime.getTime() * multiplier).toLocaleTimeString([], {
-                    hour: '2-digit',
-                    minute: '2-digit',
-                    hour12: false,
-                    timeZone: 'Europe/Moscow'
-                });
-                const tarkovTimeRight = new Date(currentDateTime.getTime() * multiplier - 43200000).toLocaleTimeString([], {
-                    hour: '2-digit',
-                    minute: '2-digit',
-                    hour12: false,
-                    timeZone: 'Europe/Moscow'
-                });
-                ev.action.setTitle(`${tarkovTimeLeft}\n${tarkovTimeRight}`);
+            this.scheduleTicks(ev);
+        }
+        onWillDisappear(_ev) {
+            if (this.timer) {
+                clearInterval(this.timer);
+                this.timer = null;
+            }
+        }
+        scheduleTicks(ev) {
+            const tick = () => {
+                const nowMs = Date.now();
+                const left = this.formatTarkovTime(nowMs * TARKOV_TIME_MULTIPLIER);
+                const right = this.formatTarkovTime(nowMs * TARKOV_TIME_MULTIPLIER - TARKOV_TIME_OFFSET_MS);
+                ev.action.setTitle(`${left}\n${right}`);
             };
-            this.updateInterval = setInterval(updateTarkovTime, 2000);
-            updateTarkovTime();
+            tick();
+            this.timer = setInterval(tick, INTERVALS.TARKOV_TIME);
+        }
+        formatTarkovTime(epochMs) {
+            return new Date(epochMs).toLocaleTimeString([], {
+                hour: "2-digit",
+                minute: "2-digit",
+                hour12: false,
+                timeZone: TARKOV_TIMEZONE,
+            });
         }
     });
     return _classThis;
 })();
 
-const apiURL = "https://tarkovbot.eu/api/streamdeck/goonslocation";
+function formatCountdown(ms) {
+    const totalSeconds = Math.max(0, Math.floor(ms / 1000));
+    const hours = String(Math.floor(totalSeconds / 3600)).padStart(2, "0");
+    const minutes = String(Math.floor((totalSeconds % 3600) / 60)).padStart(2, "0");
+    const seconds = String(totalSeconds % 60).padStart(2, "0");
+    return `${hours}:${minutes}:${seconds}`;
+}
+function formatElapsed(ms) {
+    const totalSeconds = Math.max(0, Math.floor(ms / 1000));
+    const hours = Math.floor(totalSeconds / 3600);
+    const minutes = Math.floor((totalSeconds % 3600) / 60);
+    const seconds = totalSeconds % 60;
+    const parts = [];
+    if (hours > 0)
+        parts.push(`${hours}h`);
+    if (minutes > 0)
+        parts.push(`${minutes}m`);
+    parts.push(`${seconds}s`);
+    return parts.join(" ");
+}
+function formatDatacenter(name) {
+    return name
+        .replace("North America", "NA")
+        .replace(" -", "")
+        .replace(/ /g, "\n");
+}
+
+const DEFAULT_TITLE$1 = `Get\nGoons\nLocation`;
+const SELECT_MODE_TITLE$2 = "Select\nGame\nMode";
+const ENTER_TOKEN_TITLE = "Enter\nYour\nToken";
+const SELECT_MODE_AND_TOKEN_TITLE = "Select Mode\n& Token";
+function isValidGoonsSource(source) {
+    return source === "PVP" || source === "PVE" || source === "SEASON";
+}
 let TarkovGoonsLocation = (() => {
     let _classDecorators = [action({ UUID: "eu.tarkovbot.tools.goonsgetlocation" })];
     let _classDescriptor;
@@ -8078,95 +9347,478 @@ let TarkovGoonsLocation = (() => {
             if (_metadata) Object.defineProperty(_classThis, Symbol.metadata, { enumerable: true, configurable: true, writable: true, value: _metadata });
             __runInitializers(_classThis, _classExtraInitializers);
         }
-        onWillAppear(ev) {
-            ev.action.setTitle(`Get\nGoons\nLocation`);
+        autoRefreshTimers = new Map();
+        autoResetTimers = new Map();
+        generations = new Map();
+        async onWillAppear(ev) {
+            const settings = ev.payload.settings ?? {};
+            await this.renderIdle(ev.action, settings);
         }
-        ;
-        async onKeyDown(ev) {
-            const { selectedGoonsSource, token } = ev.payload.settings;
-            if (!token) {
-                ev.action.setTitle("Enter\nYour\nToken");
+        onWillDisappear(ev) {
+            this.stopAllTimers(ev.action.id);
+        }
+        async onDidReceiveSettings(ev) {
+            const actionId = ev.action.id;
+            const settings = ev.payload.settings ?? {};
+            if (!this.autoResetTimers.has(actionId) && !this.autoRefreshTimers.has(actionId)) {
+                await this.renderIdle(ev.action, settings);
+            }
+        }
+        async renderIdle(action, settings) {
+            const actionId = action.id;
+            this.stopAllTimers(actionId);
+            const hasSource = isValidGoonsSource(settings.selectedGoonsSource);
+            const hasToken = !!settings.token;
+            if (!hasSource && !hasToken) {
+                action.setTitle(SELECT_MODE_AND_TOKEN_TITLE);
                 return;
             }
-            if (!selectedGoonsSource) {
-                ev.action.setTitle("Select\nSource");
+            if (!hasSource) {
+                action.setTitle(SELECT_MODE_TITLE$2);
+                return;
+            }
+            if (!hasToken) {
+                action.setTitle(ENTER_TOKEN_TITLE);
+                return;
+            }
+            action.setTitle(DEFAULT_TITLE$1);
+            if (settings.auto_refresh) {
+                this.startAutoRefresh(action, settings);
+            }
+        }
+        async onKeyDown(ev) {
+            const actionId = ev.action.id;
+            this.stopAllTimers(actionId);
+            const gen = this.bumpGen(actionId);
+            const { selectedGoonsSource, token } = ev.payload.settings ?? {};
+            if (!isValidGoonsSource(selectedGoonsSource)) {
+                ev.action.setTitle(SELECT_MODE_TITLE$2);
+                return;
+            }
+            if (!token) {
+                ev.action.setTitle(ENTER_TOKEN_TITLE);
                 return;
             }
             try {
-                const response = await fetch(apiURL, {
+                const response = await fetch(ENDPOINTS.GOONS_LOCATION, {
                     method: "GET",
-                    headers: {
-                        "AUTH-TOKEN": String(token)
-                    }
+                    headers: { "auth-token": String(token) },
                 });
+                if (this.generations.get(actionId) !== gen)
+                    return;
                 if (response.status === 401) {
                     ev.action.setTitle("Invalid\nToken");
+                    this.scheduleReset(actionId, gen, ev.action);
                     return;
                 }
                 if (response.status !== 200) {
                     ev.action.setTitle("Something\nWent\nWrong.");
+                    this.scheduleReset(actionId, gen, ev.action);
                     return;
                 }
-                const goonsData = await response.json();
-                let location = selectedGoonsSource === "NEW" ? goonsData.pvp.location : (selectedGoonsSource === "PVP" ? goonsData.pvp.location : goonsData.pve.location);
-                let reported = new Date(selectedGoonsSource === "NEW" ? goonsData.pvp.reported : (selectedGoonsSource === "PVP" ? goonsData.pvp.reported : goonsData.pve.reported));
-                let timeDiff = Math.floor((Date.now() - reported.getTime()) / 1000);
-                let hours = Math.floor(timeDiff / 3600);
-                let minutes = Math.floor((timeDiff % 3600) / 60);
-                let seconds = timeDiff % 60;
-                let reportedFormatted = `${hours > 0 ? `${hours}h ` : ''}${minutes > 0 ? `${minutes % 60}m ` : ''}${seconds % 60}s`;
-                ev.action.setTitle(`${location}\n${reportedFormatted}`);
-                // Wait 5 seconds and then set title again to press
-                setTimeout(() => {
-                    ev.action.setTitle(`Get\nGoons\nLocation`);
-                }, 5000);
+                const data = (await response.json());
+                const report = this.selectReport(data, selectedGoonsSource);
+                if (!report) {
+                    ev.action.setTitle("No\nReport\nYet");
+                    this.scheduleReset(actionId, gen, ev.action);
+                    return;
+                }
+                const elapsedMs = Date.now() - new Date(report.reported).getTime();
+                ev.action.setTitle(`${report.location}\n${formatElapsed(elapsedMs)}`);
+                // Only schedule reset if auto-refresh is NOT running
+                if (!this.autoRefreshTimers.has(actionId)) {
+                    this.scheduleReset(actionId, gen, ev.action);
+                }
             }
-            catch (error) {
-                ev.action.setTitle(`Something\nWent\nWrong.`);
+            catch {
+                if (this.generations.get(actionId) === gen) {
+                    ev.action.setTitle("Something\nWent\nWrong.");
+                }
             }
         }
-        async onSendToPlugin(ev) {
-            if (ev.payload === 'openWebsite') {
-                streamDeck.system.openUrl('https://tarkovbot.eu/stream-deck');
+        scheduleReset(actionId, gen, action) {
+            // Clear any previous reset timer for this action
+            const prev = this.autoResetTimers.get(actionId);
+            if (prev)
+                clearTimeout(prev);
+            const reset = setTimeout(() => {
+                this.autoResetTimers.delete(actionId);
+                if (this.generations.get(actionId) === gen &&
+                    !this.autoRefreshTimers.has(actionId)) {
+                    action.setTitle(DEFAULT_TITLE$1);
+                }
+            }, 5_000);
+            this.autoResetTimers.set(actionId, reset);
+        }
+        selectReport(data, source) {
+            if (source === "PVP")
+                return data.pvp;
+            if (source === "PVE")
+                return data.pve;
+            if (source === "SEASON")
+                return data.season ?? null;
+            return null;
+        }
+        startAutoRefresh(action, settings) {
+            const actionId = action.id;
+            if (!settings.token || !isValidGoonsSource(settings.selectedGoonsSource))
+                return;
+            // Initial fetch immediately
+            void this.fetchAndRender(action, settings);
+            const timer = setInterval(() => {
+                void this.fetchAndRender(action, settings);
+            }, INTERVALS.GOONS_AUTO_REFRESH);
+            this.autoRefreshTimers.set(actionId, timer);
+        }
+        async fetchAndRender(action, settings) {
+            const { selectedGoonsSource, token } = settings;
+            if (!isValidGoonsSource(selectedGoonsSource) || !token)
+                return;
+            try {
+                const response = await fetch(ENDPOINTS.GOONS_LOCATION, {
+                    method: "GET",
+                    headers: { "auth-token": String(token) },
+                });
+                if (response.status === 401) {
+                    action.setTitle("Invalid\nToken");
+                    return;
+                }
+                if (response.status !== 200) {
+                    action.setTitle("Something\nWent\nWrong.");
+                    return;
+                }
+                const data = (await response.json());
+                const report = this.selectReport(data, selectedGoonsSource);
+                if (!report) {
+                    action.setTitle("No\nReport\nYet");
+                    return;
+                }
+                const elapsedMs = Date.now() - new Date(report.reported).getTime();
+                action.setTitle(`${report.location}\n${formatElapsed(elapsedMs)}`);
             }
-            if (ev.payload === 'openPatreon') {
-                streamDeck.system.openUrl('https://patreon.com/tarkovboteu');
+            catch {
+                // silent — keep last title
+            }
+        }
+        stopAllTimers(actionId) {
+            const refresh = this.autoRefreshTimers.get(actionId);
+            if (refresh) {
+                clearInterval(refresh);
+                this.autoRefreshTimers.delete(actionId);
+            }
+            const reset = this.autoResetTimers.get(actionId);
+            if (reset) {
+                clearTimeout(reset);
+                this.autoResetTimers.delete(actionId);
+            }
+            this.bumpGen(actionId);
+        }
+        bumpGen(actionId) {
+            const gen = (this.generations.get(actionId) ?? 0) + 1;
+            this.generations.set(actionId, gen);
+            return gen;
+        }
+        async onSendToPlugin(ev) {
+            if (typeof ev.payload !== "string")
+                return;
+            switch (ev.payload) {
+                case "openWebsite":
+                    streamDeck.system.openUrl(URL_WEBSITE);
+                    break;
+                case "openPatreon":
+                    streamDeck.system.openUrl(URL_PATREON);
+                    break;
             }
         }
     });
     return _classThis;
 })();
 
-const apiURL_PVE = "https://tarkovbot.eu/api/pve/streamdeck/trader-resets";
-const apiURL_PVP = "https://tarkovbot.eu/api/streamdeck/trader-resets";
-let data_PVE = [];
-let data_PVP = [];
-async function refreshDataPVE() {
-    try {
-        const response = await fetch(apiURL_PVE);
-        const jsonData = await response.json();
-        data_PVE = jsonData.data.traders;
+class StateService {
+    _currentLocationId = null;
+    _maps = {
+        PVP: [],
+        PVE: [],
+        SEASON: [],
+    };
+    _datacenters = {};
+    get currentLocationId() {
+        return this._currentLocationId;
     }
-    catch (error) {
-        console.error("Error fetching PVE data:", error);
-        data_PVE = [];
+    set currentLocationId(value) {
+        this._currentLocationId = value;
+    }
+    get mapsPVP() {
+        return this._maps.PVP;
+    }
+    get mapsPVE() {
+        return this._maps.PVE;
+    }
+    get mapsSeason() {
+        return this._maps.SEASON;
+    }
+    setMaps(mode, data) {
+        this._maps[mode] = data;
+    }
+    getMapData(locationId, mode) {
+        if (!locationId)
+            return null;
+        const source = this._maps[mode];
+        return source.find((m) => m.nameId === locationId) ?? null;
+    }
+    get datacenters() {
+        return this._datacenters;
+    }
+    set datacenters(value) {
+        this._datacenters = value;
+    }
+    resolveDatacenter(sidPrefix) {
+        for (const region of Object.keys(this._datacenters)) {
+            for (const dc of this._datacenters[region]) {
+                if (dc.sids?.some((sid) => sidPrefix.startsWith(sid))) {
+                    return dc.datacenter;
+                }
+            }
+        }
+        return "Unknown";
     }
 }
-async function refreshDataPVP() {
-    try {
-        const response = await fetch(apiURL_PVP);
-        const jsonData = await response.json();
-        data_PVP = jsonData.data.traders;
+const stateService = new StateService();
+
+function isMapsApiResponse(data) {
+    return !!data && typeof data === "object" && Array.isArray(data.maps);
+}
+function isTradersApiResponse(data) {
+    return (!!data &&
+        typeof data === "object" &&
+        Array.isArray(data.data?.traders));
+}
+function isLocalMapNamesArray(data) {
+    return (Array.isArray(data) &&
+        data.every((item) => item &&
+            typeof item === "object" &&
+            Array.isArray(item.localIDs) &&
+            typeof item.dataID === "string"));
+}
+function consolidateBosses(rawBosses) {
+    const bossMap = new Map();
+    for (const b of rawBosses) {
+        const name = b.boss.name;
+        const id = b.boss.id;
+        const chance = Number((b.spawnChance * 100).toFixed(0));
+        if (!bossMap.has(name)) {
+            bossMap.set(name, { id, spawnChances: [] });
+        }
+        bossMap.get(name).spawnChances.push(chance);
     }
-    catch (error) {
-        console.error("Error fetching PVP data:", error);
-        data_PVP = [];
+    return Array.from(bossMap.entries()).map(([name, { id, spawnChances }]) => {
+        const lowest = Math.min(...spawnChances);
+        const highest = Math.max(...spawnChances);
+        const spawnChance = lowest === highest ? `${lowest}%` : `${lowest}-${highest}%`;
+        return { name, id, spawnChance };
+    });
+}
+function dedupe(fn, keyFn = (...args) => JSON.stringify(args)) {
+    const inflight = new Map();
+    return async (...args) => {
+        const key = keyFn(...args);
+        const existing = inflight.get(key);
+        if (existing)
+            return existing;
+        const p = fn(...args).finally(() => inflight.delete(key));
+        inflight.set(key, p);
+        return p;
+    };
+}
+class TTLCache {
+    ttlMs;
+    entry = null;
+    constructor(ttlMs) {
+        this.ttlMs = ttlMs;
+    }
+    get() {
+        if (!this.entry)
+            return null;
+        if (Date.now() >= this.entry.expiresAt) {
+            this.entry = null;
+            return null;
+        }
+        return this.entry.data;
+    }
+    set(data) {
+        this.entry = { data, expiresAt: Date.now() + this.ttlMs };
     }
 }
-refreshDataPVP();
-refreshDataPVE();
-setInterval(refreshDataPVP, 900000);
-setInterval(refreshDataPVE, 900000);
+class TarkovApiService {
+    mapsCache = {
+        PVP: new TTLCache(INTERVALS.MAP_DATA_REFRESH),
+        PVE: new TTLCache(INTERVALS.MAP_DATA_REFRESH),
+        SEASON: new TTLCache(INTERVALS.MAP_DATA_REFRESH),
+    };
+    tradersCache = {
+        PVP: new TTLCache(INTERVALS.TRADER_DATA_REFRESH),
+        PVE: new TTLCache(INTERVALS.TRADER_DATA_REFRESH),
+        SEASON: new TTLCache(INTERVALS.TRADER_DATA_REFRESH),
+    };
+    localMapNamesCache = [];
+    localMapNamesLoaded = false;
+    bossImageCache = new Map();
+    refreshMaps = dedupe(async (mode) => {
+        const url = mapsEndpoint(mode);
+        try {
+            const res = await fetch(url);
+            const json = await res.json();
+            if (!isMapsApiResponse(json))
+                return [];
+            const consolidated = json.maps.map((m) => ({
+                ...m,
+                bosses: consolidateBosses(m.bosses),
+            }));
+            stateService.setMaps(mode, consolidated);
+            this.mapsCache[mode].set(consolidated);
+            streamDeck.logger.info(`Processed ${mode} Map Data (${consolidated.length} maps)`);
+            return consolidated;
+        }
+        catch (err) {
+            streamDeck.logger.error(`Error fetching ${mode} maps:`, err);
+            return [];
+        }
+    });
+    async getMaps(mode) {
+        const cached = this.mapsCache[mode].get();
+        if (cached)
+            return cached;
+        return this.refreshMaps(mode);
+    }
+    refreshMapsAsync(mode) {
+        void this.refreshMaps(mode);
+    }
+    refreshTraders = dedupe(async (mode) => {
+        const url = traderResetsEndpoint(mode);
+        try {
+            const res = await fetch(url);
+            const json = await res.json();
+            if (!isTradersApiResponse(json))
+                return [];
+            const traders = json.data.traders.map((t) => ({
+                name: String(t.name ?? ""),
+                resetTime: String(t.resetTime ?? ""),
+            }));
+            this.tradersCache[mode].set(traders);
+            streamDeck.logger.info(`Processed ${mode} trader data (${traders.length} traders)`);
+            return traders;
+        }
+        catch (err) {
+            streamDeck.logger.error(`Error fetching ${mode} trader data:`, err);
+            return [];
+        }
+    });
+    async getTraders(mode) {
+        const cached = this.tradersCache[mode].get();
+        if (cached)
+            return cached;
+        return this.refreshTraders(mode);
+    }
+    refreshTradersAsync(mode) {
+        void this.refreshTraders(mode);
+    }
+    refreshDatacenters = dedupe(async () => {
+        try {
+            const res = await fetch(ENDPOINTS.DATACENTERS);
+            const json = await res.json();
+            if (json && typeof json === "object") {
+                const data = json;
+                stateService.datacenters = data;
+                streamDeck.logger.info("Datacenter list updated.");
+                return data;
+            }
+        }
+        catch (err) {
+            streamDeck.logger.error("Error fetching datacenter data:", err);
+        }
+        return {};
+    });
+    async getDatacenters() {
+        const current = stateService.datacenters;
+        if (Object.keys(current).length > 0)
+            return current;
+        return this.refreshDatacenters();
+    }
+    refreshDatacentersAsync() {
+        void this.refreshDatacenters();
+    }
+    refreshLocalMapNames = dedupe(async () => {
+        try {
+            const res = await fetch(ENDPOINTS.LOCAL_MAP_NAMES);
+            const json = await res.json();
+            if (isLocalMapNamesArray(json)) {
+                this.localMapNamesCache = json;
+                this.localMapNamesLoaded = true;
+                streamDeck.logger.info("Local map names loaded successfully");
+                return json;
+            }
+        }
+        catch (err) {
+            streamDeck.logger.error("Error fetching local map names:", err);
+        }
+        return [];
+    });
+    async getLocalMapNames() {
+        if (this.localMapNamesLoaded)
+            return this.localMapNamesCache;
+        return this.refreshLocalMapNames();
+    }
+    refreshLocalMapNamesAsync() {
+        void this.refreshLocalMapNames();
+    }
+    async getBossImage(bossId) {
+        const cached = this.bossImageCache.get(bossId);
+        if (cached)
+            return cached;
+        const primary = `${BOSS_IMAGE_BASE}/${bossId}.webp`;
+        try {
+            let response = await fetch(primary);
+            if (!response.ok) {
+                response = await fetch(BOSS_IMAGE_FALLBACK);
+            }
+            if (!response.ok)
+                return null;
+            const buf = await response.arrayBuffer();
+            const dataUrl = `data:image/webp;base64,${Buffer.from(buf).toString("base64")}`;
+            this.bossImageCache.set(bossId, dataUrl);
+            return dataUrl;
+        }
+        catch (err) {
+            streamDeck.logger.error(`Failed to fetch boss image for ${bossId}:`, err);
+            return null;
+        }
+    }
+    invalidateBossImageCache() {
+        this.bossImageCache.clear();
+    }
+}
+const tarkovApiService = new TarkovApiService();
+
+const LOADING_TITLE$1 = "\n\n\nLoading";
+const NO_DATA_TITLE = "\n\n\nNo Data";
+const RESTOCK_TITLE = "\n\n\nRestock";
+const SELECT_BOTH_TITLE = "Select\nTrader\n& Mode";
+const SELECT_TRADER_TITLE = "Select\nTrader";
+const SELECT_MODE_TITLE$1 = "Select\nGame\nMode";
+function isValidGameMode$1(mode) {
+    return mode === "PVP" || mode === "PVE" || mode === "SEASON";
+}
+function migrateLegacy$1(settings) {
+    if (isValidGameMode$1(settings.game_mode))
+        return settings;
+    const legacy = settings.pve_traders_mode_check;
+    if (typeof legacy !== "boolean")
+        return settings;
+    const migrated = { ...settings };
+    migrated.game_mode = legacy ? "PVE" : "PVP";
+    delete migrated.pve_traders_mode_check;
+    return migrated;
+}
 let TarkovTraderRestock = (() => {
     let _classDecorators = [action({ UUID: "eu.tarkovbot.tools.traderrestock" })];
     let _classDescriptor;
@@ -8182,346 +9834,389 @@ let TarkovTraderRestock = (() => {
             if (_metadata) Object.defineProperty(_classThis, Symbol.metadata, { enumerable: true, configurable: true, writable: true, value: _metadata });
             __runInitializers(_classThis, _classExtraInitializers);
         }
-        updateIntervals = new Map();
-        updateTitleAndImage(action, restockData) {
-            if (!restockData) {
-                action.setTitle("\n\n\nNo Data");
-                return;
+        timers = new Map();
+        generations = new Map();
+        async onWillAppear(ev) {
+            const raw = ev.payload.settings ?? {};
+            const settings = migrateLegacy$1(raw);
+            if (settings !== raw) {
+                await ev.action.setSettings(settings);
             }
-            const resetTime = new Date(restockData.resetTime);
-            const currentTime = new Date();
-            const timeDifference = resetTime.getTime() - currentTime.getTime();
-            if (timeDifference >= 0) {
-                const hours = String(Math.floor(timeDifference / (1000 * 60 * 60))).padStart(2, '0');
-                const minutes = String(Math.floor((timeDifference % (1000 * 60 * 60)) / (1000 * 60))).padStart(2, '0');
-                const seconds = String(Math.floor((timeDifference % (1000 * 60)) / 1000)).padStart(2, '0');
-                action.setTitle(`\n\n\n${hours}:${minutes}:${seconds}`);
-            }
-            else {
-                action.setTitle(`\n\n\nRestock`);
-            }
-        }
-        async startUpdating(action, settings, actionId) {
-            // Clear existing interval for this action
-            this.stopUpdating(actionId);
-            action.setTitle("\n\n\nLoading");
-            // Wait for data to be refreshed if it's empty
-            if (settings.pve_traders_mode_check && (!Array.isArray(data_PVE) || data_PVE.length === 0)) {
-                await refreshDataPVE();
-            }
-            else if (!settings.pve_traders_mode_check && (!Array.isArray(data_PVP) || data_PVP.length === 0)) {
-                await refreshDataPVP();
-            }
-            const intervalId = setInterval(() => {
-                const trader = settings.selectedTrader;
-                const pveMode = settings.pve_traders_mode_check;
-                if (!trader) {
-                    action.setTitle("No\nTrader\nSelected");
-                    return;
-                }
-                const traderData = pveMode ? data_PVE : data_PVP;
-                if (!Array.isArray(traderData) || traderData.length === 0) {
-                    action.setTitle("\n\n\nNo Data");
-                    return;
-                }
-                const restockData = traderData.find(data => data.name === trader);
-                if (!restockData) {
-                    action.setTitle("\n\n\nNo Data");
-                    return;
-                }
-                this.updateTitleAndImage(action, restockData);
-            }, 1000);
-            this.updateIntervals.set(actionId, intervalId);
-        }
-        stopUpdating(actionId) {
-            const intervalId = this.updateIntervals.get(actionId);
-            if (intervalId) {
-                clearInterval(intervalId);
-                this.updateIntervals.delete(actionId);
-            }
-        }
-        onWillAppear(ev) {
-            const settings = ev.payload.settings;
-            const actionId = ev.action.id;
-            if (!settings.selectedTrader) {
-                ev.action.setTitle("Select\nTrader");
-            }
-            ev.action.setImage(`assets/${settings.selectedTrader}.png`);
-            this.startUpdating(ev.action, settings, actionId);
+            await this.renderFor(ev.action, settings);
         }
         onWillDisappear(ev) {
-            this.stopUpdating(ev.action.id);
+            this.stopTimer(ev.action.id);
         }
-        onDidReceiveSettings(ev) {
-            const settings = ev.payload.settings;
-            const actionId = ev.action.id;
-            this.stopUpdating(actionId);
-            if (!settings.selectedTrader) {
-                ev.action.setTitle("Select\nTrader");
-                ev.action.setImage(``);
+        async onDidReceiveSettings(ev) {
+            const settings = ev.payload.settings ?? {};
+            await this.renderFor(ev.action, settings);
+        }
+        async renderFor(action, settings) {
+            const actionId = action.id;
+            this.stopTimer(actionId);
+            const hasMode = isValidGameMode$1(settings.game_mode);
+            const hasTrader = !!settings.selectedTrader;
+            if (!hasMode && !hasTrader) {
+                action.setTitle(SELECT_BOTH_TITLE);
+                action.setImage("");
                 return;
             }
-            ev.action.setImage(`assets/${settings.selectedTrader}.png`);
-            this.startUpdating(ev.action, settings, actionId);
+            if (!hasMode) {
+                action.setTitle(SELECT_MODE_TITLE$1);
+                this.applyTraderImage(action, settings.selectedTrader);
+                return;
+            }
+            if (!hasTrader) {
+                action.setTitle(SELECT_TRADER_TITLE);
+                action.setImage("");
+                return;
+            }
+            this.applyTraderImage(action, settings.selectedTrader);
+            await this.startUpdating(action, settings);
+        }
+        async startUpdating(action, settings) {
+            const actionId = action.id;
+            const gen = this.bumpGen(actionId);
+            action.setTitle(LOADING_TITLE$1);
+            const mode = settings.game_mode;
+            await tarkovApiService.getTraders(mode);
+            if (this.generations.get(actionId) !== gen)
+                return;
+            const tick = () => {
+                if (this.generations.get(actionId) !== gen) {
+                    this.stopTimer(actionId);
+                    return;
+                }
+                void this.renderTick(action, settings, mode);
+            };
+            tick();
+            const timer = setInterval(tick, INTERVALS.TRADER_RESTOCK);
+            this.timers.set(actionId, timer);
+        }
+        stopTimer(actionId) {
+            const t = this.timers.get(actionId);
+            if (t) {
+                clearInterval(t);
+                this.timers.delete(actionId);
+            }
+            this.bumpGen(actionId);
+        }
+        bumpGen(actionId) {
+            const gen = (this.generations.get(actionId) ?? 0) + 1;
+            this.generations.set(actionId, gen);
+            return gen;
+        }
+        async renderTick(action, settings, mode) {
+            if (!settings.selectedTrader) {
+                action.setTitle(SELECT_TRADER_TITLE);
+                return;
+            }
+            const traders = await tarkovApiService.getTraders(mode);
+            const trader = traders.find((t) => t.name === settings.selectedTrader);
+            if (!trader) {
+                action.setTitle(NO_DATA_TITLE);
+                return;
+            }
+            this.renderCountdown(action, trader);
+        }
+        renderCountdown(action, trader) {
+            const remaining = new Date(trader.resetTime).getTime() - Date.now();
+            if (remaining <= 0) {
+                action.setTitle(RESTOCK_TITLE);
+                return;
+            }
+            action.setTitle(`\n\n\n${formatCountdown(remaining)}`);
+        }
+        applyTraderImage(action, traderName) {
+            if (!traderName) {
+                action.setImage("");
+                return;
+            }
+            action.setImage(`assets/${traderName}.png`);
         }
         async onSendToPlugin(ev) {
-            if (ev.payload === 'openPatreon') {
-                streamDeck.system.openUrl('https://patreon.com/tarkovboteu');
+            if (typeof ev.payload === "string" && ev.payload === "openPatreon") {
+                streamDeck.system.openUrl(URL_PATREON);
             }
         }
     });
     return _classThis;
 })();
 
-const SETTINGS_FILE_PATH = path$1.join(process.cwd(), "user_settings.json");
-/**
- * Load settings from user_settings.json
- */
-function loadSettings() {
-    try {
-        if (fs$1.existsSync(SETTINGS_FILE_PATH)) {
-            const fileData = fs$1.readFileSync(SETTINGS_FILE_PATH, "utf8");
-            const settings = JSON.parse(fileData);
-            return {
-                map_autoupdate_check: settings.current_map_info?.map_autoupdate_check || false,
-                pve_map_mode_check: settings.current_map_info?.pve_map_mode_check || false,
-                eftInstallPath: settings.global?.eft_install_path || ""
-            };
-        }
-    }
-    catch (error) {
-        // Silent fail, return defaults
-    }
-    return {
-        map_autoupdate_check: false,
-        pve_map_mode_check: false,
-        eftInstallPath: ""
-    };
-}
-/**
- * Save settings to user_settings.json, merging with existing data
- */
-function saveSettings(updates) {
-    try {
-        let existingData = {};
-        if (fs$1.existsSync(SETTINGS_FILE_PATH)) {
-            const fileData = fs$1.readFileSync(SETTINGS_FILE_PATH, "utf8");
-            existingData = JSON.parse(fileData);
-        }
-        const mergedData = { ...existingData, ...updates };
-        fs$1.writeFileSync(SETTINGS_FILE_PATH, JSON.stringify(mergedData, null, 4));
-    }
-    catch (error) {
-        // Silent fail
-    }
-}
-
-/**
- * Extract timestamp from log folder name (format: log_YYYY.MM.DD_HH-MM-SS)
- */
-function extractTimestamp(folderName) {
-    try {
-        const match = folderName.match(/^log_(\d{4})\.(\d{2})\.(\d{2})_(\d{1,2})-(\d{1,2})-(\d{1,2})/);
-        if (match) {
-            const [_, year, month, day, hour, minute, second] = match;
-            const date = new Date(parseInt(year), parseInt(month) - 1, parseInt(day), parseInt(hour), parseInt(minute), parseInt(second));
-            return date.getTime();
-        }
-        return 0;
-    }
-    catch (error) {
-        return 0;
-    }
-}
-/**
- * Get sorted log folders from EFT Logs directory (newest first)
- */
-async function getLogFolders(eftPath) {
-    const logsPath = `${eftPath}\\Logs`;
-    const folders = await fs$1.promises.readdir(logsPath, { withFileTypes: true });
-    return folders
-        .filter(f => f.isDirectory() && f.name.startsWith("log_"))
-        .map(f => ({
-        dirent: f,
-        timestamp: extractTimestamp(f.name)
-    }))
-        .sort((a, b) => b.timestamp - a.timestamp)
-        .map(f => f.dirent);
-}
-/**
- * Get the latest application log file from EFT logs
- */
-async function getLatestLogFile(eftPath) {
-    try {
-        const logsPath = `${eftPath}\\Logs`;
-        const logFolders = await getLogFolders(eftPath);
-        if (logFolders.length === 0) {
-            return null;
-        }
-        const latestFolder = `${logsPath}\\${logFolders[0].name}`;
-        const files = await fs$1.promises.readdir(latestFolder, { withFileTypes: true });
-        const logFiles = files
-            .filter(f => f.isFile() && f.name.includes("application") && f.name.endsWith(".log"))
-            .sort((a, b) => b.name.localeCompare(a.name));
-        if (logFiles.length === 0) {
-            return null;
-        }
-        return `${latestFolder}\\${logFiles[0].name}`;
-    }
-    catch (error) {
-        return null;
-    }
-}
-async function findServerFromLogs(eftPath) {
-    try {
-        if (!eftPath)
-            return null;
-        const latestFile = await getLatestLogFile(eftPath);
-        if (!latestFile)
-            return null;
-        const content = await fs$1.promises.readFile(latestFile, "utf-8");
-        const lines = content.split("\n");
-        for (let i = lines.length - 1; i >= 0; i--) {
-            // Updated Regex to find Sid: US-SEA03G002_...
-            const match = lines[i].match(/Sid:\s([^_]+)_/);
-            if (match) {
-                const sidPrefix = match[1];
-                let datacenterName = "Unknown";
-                const datacenterData = globalThis.datacentersData;
-                if (datacenterData) {
-                    for (const region in datacenterData) {
-                        for (const dc of datacenterData[region]) {
-                            if (dc.sids && dc.sids.some((sid) => sidPrefix.startsWith(sid))) {
-                                datacenterName = dc.datacenter;
-                                break;
-                            }
-                        }
-                        if (datacenterName !== "Unknown")
-                            break;
-                    }
-                }
-                return { sid: sidPrefix, datacenter: datacenterName };
-            }
-        }
-        return null;
-    }
-    catch (error) {
-        return null;
-    }
-}
-
 const execAsync = promisify(exec);
 const REGISTRY_PATHS = [
     "HKLM\\SOFTWARE\\WOW6432Node\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\EscapeFromTarkov",
-    "HKLM\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\Steam App 3932890"
+    "HKLM\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\Steam App 3932890",
 ];
-/**
- * Detect EFT installation path from Windows Registry
- * Checks both regular and Steam installation paths
- */
+const REG_INSTALL_LOCATION = /InstallLocation\s+REG_SZ\s+(.+)/i;
 async function detectEftPath() {
     for (const regPath of REGISTRY_PATHS) {
         try {
             const { stdout } = await execAsync(`reg query "${regPath}" /v InstallLocation`, {
-                encoding: "utf8"
+                encoding: "utf8",
             });
-            // Parse the registry output to get the install path
-            const match = stdout.match(/InstallLocation\s+REG_SZ\s+(.+)/i);
-            if (match && match[1]) {
-                const installPath = match[1].trim();
-                // Check if Logs folder exists
-                let logsPath = `${installPath}\\Logs`;
-                if (!fs$1.existsSync(logsPath)) {
-                    logsPath = `${installPath}\\build\\Logs`;
-                }
-                if (fs$1.existsSync(logsPath)) {
-                    // Return the install path (without \Logs)
-                    const basePath = logsPath.replace(/\\Logs$/, "").replace(/\\build\\Logs$/, "");
-                    return { success: true, path: basePath.includes("\\build") ? `${installPath}\\build` : installPath };
-                }
+            const match = stdout.match(REG_INSTALL_LOCATION);
+            if (!match?.[1])
+                continue;
+            const installPath = match[1].trim();
+            const candidate = resolveLogsRoot(installPath);
+            if (candidate) {
+                return { success: true, path: candidate };
             }
         }
-        catch (error) {
-            // Registry key doesn't exist or error reading, continue to next path
+        catch {
             continue;
         }
     }
     return {
         success: false,
-        error: "EFT installation not found. Please enter the path manually."
+        error: "EFT installation not found. Please enter the path manually.",
     };
 }
+function resolveLogsRoot(installPath) {
+    if (fs.existsSync(`${installPath}\\Logs`)) {
+        return installPath;
+    }
+    return null;
+}
 
-const apiURLs = {
-    PVE: "https://tarkovbot.eu/api/pve/streamdeck/maps",
-    PVP: "https://tarkovbot.eu/api/streamdeck/maps",
-    LOCAL_MAP_NAMES: "https://tarkovbot.eu/api/pve/streamdeck/local-map-names"
-};
-async function refreshData(mode) {
-    const apiURL = apiURLs[mode];
-    try {
-        const response = await fetch(apiURL);
-        const jsonData = await response.json();
-        if (isApiResponse(jsonData)) {
-            const locationsData = jsonData.maps.map(map => {
-                const bossMap = new Map();
-                map.bosses.forEach(bossData => {
-                    const bossName = bossData.boss.name;
-                    const bossId = bossData.boss.id;
-                    const spawnChance = (bossData.spawnChance * 100).toFixed(0);
-                    if (!bossMap.has(bossName)) {
-                        bossMap.set(bossName, { id: bossId, spawnChances: [] });
-                    }
-                    bossMap.get(bossName).spawnChances.push(Number(spawnChance));
-                });
-                const consolidatedBosses = Array.from(bossMap).map(([name, { id, spawnChances }]) => {
-                    const lowest = Math.min(...spawnChances);
-                    const highest = Math.max(...spawnChances);
-                    const spawnChanceString = lowest === highest ? `${lowest}%` : `${lowest}-${highest}%`;
-                    return { name, spawnChance: spawnChanceString, id };
-                });
-                return {
-                    ...map,
-                    bosses: consolidatedBosses
+class SettingsService {
+    cache = null;
+    load() {
+        if (this.cache)
+            return this.cache;
+        const defaults = { ...DEFAULT_USER_SETTINGS };
+        try {
+            if (fs.existsSync(SETTINGS_FILE_PATH)) {
+                const raw = fs.readFileSync(SETTINGS_FILE_PATH, "utf8");
+                const parsed = JSON.parse(raw);
+                const currentMapInfo = parsed.current_map_info ?? {};
+                const gameMode = currentMapInfo.game_mode ?? "PVP";
+                this.cache = {
+                    map_autoupdate_check: currentMapInfo.map_autoupdate_check ?? false,
+                    game_mode: gameMode,
+                    raid_autoupdate_check: parsed.current_server_info?.raid_autoupdate_check ?? false,
+                    eftInstallPath: parsed.global?.eft_install_path ?? "",
                 };
+                return this.cache;
+            }
+        }
+        catch {
+            // fallthrough to defaults
+        }
+        this.cache = defaults;
+        return defaults;
+    }
+    save(updates) {
+        try {
+            let existing = {};
+            if (fs.existsSync(SETTINGS_FILE_PATH)) {
+                existing = JSON.parse(fs.readFileSync(SETTINGS_FILE_PATH, "utf8"));
+            }
+            const merged = { ...existing, ...updates };
+            fs.writeFileSync(SETTINGS_FILE_PATH, JSON.stringify(merged, null, 4));
+            this.cache = null;
+        }
+        catch {
+            // silent fail
+        }
+    }
+    setEftInstallPath(installPath) {
+        this.save({ global: { eft_install_path: installPath } });
+    }
+    setMapInfoFlags(opts) {
+        const current = this.load();
+        this.save({
+            current_map_info: {
+                map_autoupdate_check: opts.map_autoupdate_check ?? current.map_autoupdate_check,
+                game_mode: opts.game_mode ?? current.game_mode,
+            },
+        });
+    }
+    setRaidServerFlags(opts) {
+        const current = this.load();
+        this.save({
+            current_server_info: {
+                raid_autoupdate_check: opts.raid_autoupdate_check ?? current.raid_autoupdate_check,
+            },
+        });
+    }
+    invalidateCache() {
+        this.cache = null;
+    }
+}
+const settingsService = new SettingsService();
+
+async function handleCommonCommands(ev) {
+    if (typeof ev.payload === "string") {
+        if (ev.payload === "openPatreon") {
+            streamDeck.system.openUrl(URL_PATREON);
+            return true;
+        }
+        return false;
+    }
+    const payload = ev.payload;
+    if (!payload?.command)
+        return false;
+    if (payload.command === "autoDetectPath") {
+        const result = await detectEftPath();
+        streamDeck.logger.info("Auto-detect result:", JSON.stringify(result));
+        if (result.success && result.path) {
+            await ev.action.setSettings({
+                ...(await ev.action.getSettings()),
+                eft_install_path: result.path,
             });
-            globalThis[`locationsData${mode}`] = locationsData;
-            streamDeck.logger.info(`Processed ${mode} Map Data`);
+            settingsService.setEftInstallPath(result.path);
+            await sendToInspector({
+                event: "autoDetectResult",
+                success: true,
+                path: result.path,
+            });
         }
+        else {
+            await sendToInspector({
+                event: "autoDetectResult",
+                success: false,
+                error: result.error,
+            });
+        }
+        return true;
     }
-    catch (error) {
-        streamDeck.logger.error(`Error fetching ${mode} data:`, error);
+    if (payload.command === "getGlobalSettings") {
+        const settings = settingsService.load();
+        await sendToInspector({
+            event: "globalSettings",
+            eft_install_path: settings.eftInstallPath,
+        });
+        return true;
     }
+    return false;
 }
-function isApiResponse(data) {
-    return data && typeof data === 'object' && Array.isArray(data.maps);
-}
-let localMapNames = [];
-// Refresh local map names
-async function refreshLocalMapNames() {
+async function sendToInspector(msg) {
     try {
-        const response = await fetch(apiURLs.LOCAL_MAP_NAMES);
-        const jsonData = await response.json();
-        if (isLocalMapNamesArray(jsonData)) {
-            localMapNames = jsonData;
-            streamDeck.logger.info("Local map names loaded successfully");
+        await streamDeck.ui.sendToPropertyInspector(msg);
+    }
+    catch {
+        // property inspector closed
+    }
+}
+
+function extractTimestamp(folderName) {
+    const match = folderName.match(LOG_REGEX_FOLDER_TIMESTAMP);
+    if (!match)
+        return 0;
+    const [, year, month, day, hour, minute, second] = match;
+    return new Date(Number(year), Number(month) - 1, Number(day), Number(hour), Number(minute), Number(second)).getTime();
+}
+async function listLogFolders(eftPath) {
+    const logsPath = `${eftPath}\\Logs`;
+    const entries = await fs.promises.readdir(logsPath, { withFileTypes: true });
+    return entries
+        .filter((f) => f.isDirectory() && f.name.startsWith("log_"))
+        .map((f) => ({ name: f.name, timestamp: extractTimestamp(f.name) }))
+        .sort((a, b) => b.timestamp - a.timestamp);
+}
+async function listAppLogFiles(folderPath) {
+    const entries = await fs.promises.readdir(folderPath, { withFileTypes: true });
+    return entries
+        .filter((f) => f.isFile() && f.name.includes(LOG_APP_FILE_FRAGMENT) && f.name.endsWith(".log"))
+        .sort((a, b) => b.name.localeCompare(a.name))
+        .map((f) => f.name);
+}
+async function getLatestLogFile(eftPath) {
+    if (!eftPath)
+        return null;
+    try {
+        const folders = await listLogFolders(eftPath);
+        if (folders.length === 0)
+            return null;
+        const latestFolder = `${eftPath}\\Logs\\${folders[0].name}`;
+        const files = await listAppLogFiles(latestFolder);
+        if (files.length === 0)
+            return null;
+        return `${latestFolder}\\${files[0]}`;
+    }
+    catch {
+        return null;
+    }
+}
+async function readLinesReversed(filePath) {
+    const content = await fs.promises.readFile(filePath, "utf-8");
+    return content.split("\n").reverse();
+}
+function findFirstMatch(linesReversed, regex) {
+    for (const line of linesReversed) {
+        const m = line.match(regex);
+        if (m && m[1])
+            return m[1];
+    }
+    return null;
+}
+async function findServerFromLogs(eftPath) {
+    if (!eftPath)
+        return null;
+    try {
+        const latestFile = await getLatestLogFile(eftPath);
+        if (!latestFile)
+            return null;
+        const lines = await readLinesReversed(latestFile);
+        const sidPrefix = findFirstMatch(lines, LOG_REGEX_SID);
+        if (!sidPrefix)
+            return null;
+        await tarkovApiService.getDatacenters();
+        return { sid: sidPrefix, datacenter: stateService.resolveDatacenter(sidPrefix) };
+    }
+    catch (err) {
+        streamDeck.logger.error("Error finding server from logs:", err);
+        return null;
+    }
+}
+async function findCurrentMapFromLogs(eftPath, mode) {
+    if (!eftPath)
+        return null;
+    try {
+        const latestFile = await getLatestLogFile(eftPath);
+        if (!latestFile)
+            return null;
+        const lines = await readLinesReversed(latestFile);
+        if (mode === "PVE" || mode === "SEASON") {
+            const sceneName = findFirstMatch(lines, LOG_REGEX_SCENE_PRESET);
+            if (!sceneName)
+                return null;
+            const normalised = sceneName.toLowerCase();
+            const localMapNames = await tarkovApiService.getLocalMapNames();
+            for (const entry of localMapNames) {
+                const idsLower = entry.localIDs.map((id) => id.toLowerCase());
+                if (idsLower.includes(normalised)) {
+                    return entry.dataID;
+                }
+            }
+            return normalised;
         }
+        const location = findFirstMatch(lines, LOG_REGEX_LOCATION);
+        return location ?? null;
     }
-    catch (error) {
-        streamDeck.logger.error("Error fetching local map names:", error);
+    catch (err) {
+        streamDeck.logger.error("Error reading logs:", err);
+        return null;
     }
 }
-function isLocalMapNamesArray(data) {
-    return Array.isArray(data) && data.every(item => item && typeof item === 'object' &&
-        Array.isArray(item.localIDs) &&
-        typeof item.dataID === 'string');
+
+const SELECT_MODE_TITLE = "Select\nGame\nMode";
+function isValidGameMode(mode) {
+    return mode === "PVP" || mode === "PVE" || mode === "SEASON";
 }
-refreshLocalMapNames();
-refreshData('PVE');
-refreshData('PVP');
-setInterval(() => refreshData('PVE'), 1200000);
-setInterval(() => refreshData('PVP'), 1200000);
-let intervalUpdateInterval$6;
+function migrateLegacy(settings) {
+    if (isValidGameMode(settings.game_mode))
+        return settings;
+    const legacy = settings.pve_map_mode_check;
+    if (typeof legacy !== "boolean")
+        return settings;
+    const migrated = { ...settings };
+    migrated.game_mode = legacy ? "PVE" : "PVP";
+    delete migrated.pve_map_mode_check;
+    return migrated;
+}
 let TarkovCurrentMapInfo = (() => {
     let _classDecorators = [action({ UUID: "eu.tarkovbot.tools.mapinfo" })];
     let _classDescriptor;
@@ -8537,220 +10232,163 @@ let TarkovCurrentMapInfo = (() => {
             if (_metadata) Object.defineProperty(_classThis, Symbol.metadata, { enumerable: true, configurable: true, writable: true, value: _metadata });
             __runInitializers(_classThis, _classExtraInitializers);
         }
+        autoUpdateTimers = new Map();
+        generations = new Map();
         async onWillAppear(ev) {
+            const raw = ev.payload.settings ?? {};
+            let settings = migrateLegacy(raw);
+            if (settings !== raw) {
+                await ev.action.setSettings(settings);
+            }
+            settings = await this.maybeInheritFromGlobal(ev.action, settings);
+            if (!isValidGameMode(settings.game_mode)) {
+                ev.action.setTitle(SELECT_MODE_TITLE);
+                return;
+            }
             ev.action.setTitle(`Get\nCurrent\nMap Info`);
         }
         async onKeyDown(ev) {
-            const eftInstallPath = ev.payload.settings.eft_install_path;
-            streamDeck.logger.info("Payload settings on keydown: " + JSON.stringify(ev.payload.settings));
-            if (intervalUpdateInterval$6) {
-                clearInterval(intervalUpdateInterval$6);
-                intervalUpdateInterval$6 = null;
+            const settings = ev.payload.settings ?? {};
+            if (!isValidGameMode(settings.game_mode)) {
+                ev.action.setTitle(SELECT_MODE_TITLE);
+                return;
             }
-            globalThis.location = await this.getLatestMap(eftInstallPath);
-            if (ev.payload.settings.map_autoupdate_check) {
-                intervalUpdateInterval$6 = setInterval(async () => {
-                    globalThis.location = await this.getLatestMap(eftInstallPath);
-                    streamDeck.logger.info("Auto-update interval triggered; location:", globalThis.location);
-                }, 3000);
+            const global = settingsService.load();
+            const eftInstallPath = global.eftInstallPath || settings.eft_install_path || "";
+            this.stopAutoUpdate(ev.action.id);
+            const gen = this.bumpGen(ev.action.id);
+            stateService.currentLocationId = await findCurrentMapFromLogs(eftInstallPath, settings.game_mode);
+            if (this.generations.get(ev.action.id) !== gen)
+                return;
+            if (settings.map_autoupdate_check) {
+                this.autoUpdateTimers.set(ev.action.id, setInterval(async () => {
+                    if (this.generations.get(ev.action.id) !== gen) {
+                        this.stopAutoUpdate(ev.action.id);
+                        return;
+                    }
+                    stateService.currentLocationId = await findCurrentMapFromLogs(eftInstallPath, settings.game_mode);
+                }, INTERVALS.MAP_DISCOVERY));
             }
-            else {
-                streamDeck.logger.info("Auto-update disabled; location:", globalThis.location);
-            }
-            if (globalThis.location) {
-                streamDeck.profiles.switchToProfile(ev.action.device.id, await this.getProfilePath(ev.action.device.type));
+            if (stateService.currentLocationId) {
+                streamDeck.profiles.switchToProfile(ev.action.device.id, this.getProfilePath(ev.action.device.type));
             }
             else {
                 ev.action.setTitle("Not Found");
-                streamDeck.logger.info("Map not found; returned value:", globalThis.location);
             }
         }
-        async getLatestMap(eftPath) {
-            try {
-                const settings = loadSettings();
-                const pveMode = settings.pve_map_mode_check;
-                const logsPath = `${eftPath}\\Logs`;
-                streamDeck.logger.info("Using logs path:", logsPath);
-                const folders = await fs$1.promises.readdir(logsPath, { withFileTypes: true });
-                const logFolders = folders
-                    .filter(f => f.isDirectory() && f.name.startsWith("log_"))
-                    .map(f => ({
-                    dirent: f,
-                    timestamp: extractTimestamp(f.name)
-                }))
-                    .sort((a, b) => b.timestamp - a.timestamp)
-                    .map(f => f.dirent);
-                if (logFolders.length === 0) {
-                    streamDeck.logger.info("No log folders found");
-                    return null;
-                }
-                const latestFolder = `${logsPath}\\${logFolders[0].name}`;
-                streamDeck.logger.info("Checking latest log folder:", latestFolder);
-                const files = await fs$1.promises.readdir(latestFolder, { withFileTypes: true });
-                const logFiles = files
-                    .filter(f => f.isFile() && f.name.includes("application") && f.name.endsWith(".log"))
-                    .sort((a, b) => b.name.localeCompare(a.name));
-                if (logFiles.length === 0) {
-                    streamDeck.logger.info("No log files found in folder:", latestFolder);
-                    return null;
-                }
-                const latestFile = `${latestFolder}\\${logFiles[0].name}`;
-                streamDeck.logger.info("Reading latest log file:", latestFile);
-                const content = await fs$1.promises.readFile(latestFile, "utf-8");
-                const lines = content.split("\n");
-                // Check based on pve_map_mode_check setting
-                if (pveMode) {
-                    // Using scene preset path method for PVE mode
-                    let latestMapName = null;
-                    for (let i = lines.length - 1; i >= 0; i--) {
-                        const sceneMatch = lines[i].match(/rcid:([\w_]+)\.ScenesPreset\.asset/i);
-                        if (sceneMatch) {
-                            const mapName = sceneMatch[1].toLowerCase();
-                            streamDeck.logger.info("Map name from scene:", mapName);
-                            latestMapName = mapName;
-                            // Only process the last map found - exit after first match when reading backward
-                            break;
-                        }
-                    }
-                    if (latestMapName) {
-                        // Check if map name exists in localMapNames
-                        if (localMapNames) {
-                            for (const mapEntry of localMapNames) {
-                                const localIDsLowercase = mapEntry.localIDs.map(id => id.toLowerCase());
-                                if (localIDsLowercase.includes(latestMapName)) {
-                                    streamDeck.logger.info("Map location found (PVE mode):", mapEntry.dataID);
-                                    return mapEntry.dataID;
-                                }
-                            }
-                            streamDeck.logger.info("No matching dataID found for map:", latestMapName);
-                        }
-                        // If we couldn't map it, just return the map name we found
-                        return latestMapName;
-                    }
-                }
-                else {
-                    // Using original Location method
-                    for (let i = lines.length - 1; i >= 0; i--) {
-                        const match = lines[i].match(/Location:\s(\w+),/);
-                        if (match) {
-                            streamDeck.logger.info("Map location found:", match[1]);
-                            return match[1];
-                        }
-                    }
-                }
-                streamDeck.logger.info("No location found in latest file:", latestFile);
-                return null;
-            }
-            catch (error) {
-                streamDeck.logger.error("Error reading logs:", error);
-                return null;
-            }
+        getProfilePath(deviceType) {
+            return DEVICE_PROFILE_MAP[deviceType] ?? "";
         }
-        async getProfilePath(deviceType) {
-            switch (deviceType) {
-                case 0:
-                    return "Map Info MK V2";
-                case 1:
-                    return "Map Info Mini V2";
-                case 2:
-                    return "Map Info XL V2";
-                case 3:
-                    return "Map Info MK V2";
-                case 7:
-                    return "Map Info Neo V2";
-                case 9:
-                    return "Map Info Neo V2";
-                default:
-                    return '';
+        async onDidReceiveSettings(ev) {
+            const settings = ev.payload.settings ?? {};
+            if (!isValidGameMode(settings.game_mode)) {
+                ev.action.setTitle(SELECT_MODE_TITLE);
+                this.stopAutoUpdate(ev.action.id);
+                return;
             }
-        }
-        onDidReceiveSettings(ev) {
-            const { pve_map_mode_check, eft_install_path, map_autoupdate_check } = ev.payload.settings;
-            globalThis.pve_map_mode_check = pve_map_mode_check;
-            globalThis.eftInstallPath = eft_install_path;
-            globalThis.map_autoupdate_check = map_autoupdate_check;
-            streamDeck.logger.info("Received settings:", ev.payload.settings);
-            const updatedData = {
-                global: {
-                    eft_install_path,
-                },
-                current_map_info: {
-                    pve_map_mode_check,
-                    map_autoupdate_check,
-                },
-            };
-            saveSettings(updatedData);
+            settingsService.setMapInfoFlags({
+                map_autoupdate_check: settings.map_autoupdate_check,
+                game_mode: settings.game_mode,
+            });
+            if (settings.eft_install_path) {
+                settingsService.setEftInstallPath(settings.eft_install_path);
+            }
         }
         async onSendToPlugin(ev) {
-            const payload = ev.payload;
-            streamDeck.logger.info("onSendToPlugin received:", JSON.stringify(payload));
-            if (ev.payload === 'openPatreon') {
-                streamDeck.system.openUrl('https://patreon.com/tarkovboteu');
+            const handled = await handleCommonCommands(ev);
+            if (handled)
+                return;
+        }
+        onWillDisappear(ev) {
+            this.stopAutoUpdate(ev.action.id);
+        }
+        stopAutoUpdate(actionId) {
+            const t = this.autoUpdateTimers.get(actionId);
+            if (t) {
+                clearInterval(t);
+                this.autoUpdateTimers.delete(actionId);
             }
-            if (payload.command === "autoDetectPath") {
-                streamDeck.logger.info("Starting auto-detect path...");
-                const result = await detectEftPath();
-                streamDeck.logger.info("Auto-detect result:", JSON.stringify(result));
-                if (result.success && result.path) {
-                    // Update the action settings with the detected path
-                    await ev.action.setSettings({
-                        ...await ev.action.getSettings(),
-                        eft_install_path: result.path
-                    });
-                    // Save to global settings
-                    saveSettings({
-                        global: { eft_install_path: result.path }
-                    });
-                    // Send success response back to property inspector
-                    await streamDeck.ui.current?.sendToPropertyInspector({
-                        event: "autoDetectResult",
-                        success: true,
-                        path: result.path
-                    });
-                }
-                else {
-                    // Send error response
-                    await streamDeck.ui.current?.sendToPropertyInspector({
-                        event: "autoDetectResult",
-                        success: false,
-                        error: result.error
-                    });
-                }
+            this.bumpGen(actionId);
+        }
+        bumpGen(actionId) {
+            const gen = (this.generations.get(actionId) ?? 0) + 1;
+            this.generations.set(actionId, gen);
+            return gen;
+        }
+        async maybeInheritFromGlobal(action, settings) {
+            if (isValidGameMode(settings.game_mode))
+                return settings;
+            const global = settingsService.load();
+            const inherited = { ...settings };
+            let changed = false;
+            if (global.game_mode) {
+                inherited.game_mode = global.game_mode;
+                changed = true;
             }
-            else if (payload.command === "getGlobalSettings") {
-                const settings = loadSettings();
-                streamDeck.logger.info("Sending global settings:", settings.eftInstallPath);
-                await streamDeck.ui.current?.sendToPropertyInspector({
-                    event: "globalSettings",
-                    eft_install_path: settings.eftInstallPath
-                });
+            if (!settings.eft_install_path && global.eftInstallPath) {
+                inherited.eft_install_path = global.eftInstallPath;
+                changed = true;
             }
+            if (settings.map_autoupdate_check === undefined) {
+                inherited.map_autoupdate_check = global.map_autoupdate_check;
+                changed = true;
+            }
+            if (changed) {
+                await action.setSettings(inherited);
+                settingsService.invalidateCache();
+                return inherited;
+            }
+            return settings;
         }
     });
     return _classThis;
 })();
 
-/**
- * Get map data based on location ID and PVE/PVP mode
- */
-function getMapData(locationId, pveMode) {
-    if (!locationId) {
-        return null;
+class MapInfoBaseAction extends SingletonAction {
+    timer = null;
+    onWillAppear(ev) {
+        void this.tick(ev);
+        const settings = settingsService.load();
+        if (settings.map_autoupdate_check) {
+            this.timer = setInterval(() => void this.tick(ev), INTERVALS.MAP_INFO_AUTO_UPDATE);
+        }
     }
-    const dataSource = pveMode ? globalThis.locationsDataPVE : globalThis.locationsDataPVP;
-    if (!dataSource) {
-        return null;
+    onWillDisappear(_ev) {
+        this.clearTimer();
     }
-    return dataSource.find((map) => map.nameId === locationId) || null;
+    async tick(ev) {
+        const title = await this.computeTitle();
+        ev.action.setTitle(title);
+    }
+    async computeTitle() {
+        const settings = settingsService.load();
+        const locationId = stateService.currentLocationId;
+        if (!locationId) {
+            return this.renderUnavailable();
+        }
+        const mapData = stateService.getMapData(locationId, settings.game_mode);
+        if (!mapData) {
+            return "\nNo Map\nData";
+        }
+        return this.render(mapData);
+    }
+    renderUnavailable() {
+        return "\nUnknown\nLocation";
+    }
+    clearTimer() {
+        if (this.timer) {
+            clearInterval(this.timer);
+            this.timer = null;
+        }
+    }
 }
 
-let intervalUpdateInterval$5 = null;
 let TarkovCurrentMapInfo_Name = (() => {
     let _classDecorators = [action({ UUID: "eu.tarkovbot.tools.mapinfo.name" })];
     let _classDescriptor;
     let _classExtraInitializers = [];
     let _classThis;
-    let _classSuper = SingletonAction;
+    let _classSuper = MapInfoBaseAction;
     (class extends _classSuper {
         static { _classThis = this; }
         static {
@@ -8760,63 +10398,19 @@ let TarkovCurrentMapInfo_Name = (() => {
             if (_metadata) Object.defineProperty(_classThis, Symbol.metadata, { enumerable: true, configurable: true, writable: true, value: _metadata });
             __runInitializers(_classThis, _classExtraInitializers);
         }
-        async onWillAppear(ev) {
-            streamDeck.logger.info("Action will appear");
-            this.updateMapName(ev);
-            if (intervalUpdateInterval$5) {
-                clearInterval(intervalUpdateInterval$5);
-                intervalUpdateInterval$5 = null;
-            }
-            const settings = loadSettings();
-            if (settings.map_autoupdate_check) {
-                streamDeck.logger.info("Starting auto-update interval for map name");
-                intervalUpdateInterval$5 = setInterval(() => this.updateMapName(ev), 5000);
-            }
-        }
-        onWillDisappear(ev) {
-            streamDeck.logger.info("Action will disappear");
-            if (intervalUpdateInterval$5) {
-                clearInterval(intervalUpdateInterval$5);
-                intervalUpdateInterval$5 = null;
-            }
-        }
-        updateMapName(ev) {
-            const settings = loadSettings();
-            streamDeck.logger.info("updateMapName called");
-            const locationId = globalThis.location;
-            streamDeck.logger.info(`Current Location ID: ${locationId}`);
-            ev.action.setTitle("");
-            if (locationId) {
-                streamDeck.logger.info("Fetching map data...");
-                const mapData = getMapData(locationId, settings.pve_map_mode_check);
-                streamDeck.logger.info(`Map Mode: ${settings.pve_map_mode_check ? 'PvE' : 'PvP'}`);
-                streamDeck.logger.info(`Found Map Data: ${mapData ? JSON.stringify(mapData) : 'No map data'}`);
-                if (mapData) {
-                    const formattedName = `\n${mapData.name.replace(/ /g, "\n")}`;
-                    streamDeck.logger.info(`Setting title: ${formattedName}`);
-                    ev.action.setTitle(formattedName);
-                }
-                else {
-                    streamDeck.logger.info("No map data found, setting default title");
-                    ev.action.setTitle("\nNo Map\nData");
-                }
-            }
-            else {
-                streamDeck.logger.info("Unknown location, setting default title");
-                ev.action.setTitle("\nUnknown\nLocation");
-            }
+        render(map) {
+            return `\n${map.name.replace(/ /g, "\n")}`;
         }
     });
     return _classThis;
 })();
 
-let intervalUpdateInterval$4 = null;
 let TarkovCurrentMapInfo_Duration = (() => {
     let _classDecorators = [action({ UUID: "eu.tarkovbot.tools.mapinfo.raidduration" })];
     let _classDescriptor;
     let _classExtraInitializers = [];
     let _classThis;
-    let _classSuper = SingletonAction;
+    let _classSuper = MapInfoBaseAction;
     (class extends _classSuper {
         static { _classThis = this; }
         static {
@@ -8826,51 +10420,19 @@ let TarkovCurrentMapInfo_Duration = (() => {
             if (_metadata) Object.defineProperty(_classThis, Symbol.metadata, { enumerable: true, configurable: true, writable: true, value: _metadata });
             __runInitializers(_classThis, _classExtraInitializers);
         }
-        async onWillAppear(ev) {
-            this.updateRaidDuration(ev);
-            if (intervalUpdateInterval$4) {
-                clearInterval(intervalUpdateInterval$4);
-                intervalUpdateInterval$4 = null;
-            }
-            const settings = loadSettings();
-            if (settings.map_autoupdate_check) {
-                intervalUpdateInterval$4 = setInterval(() => this.updateRaidDuration(ev), 5000);
-            }
-        }
-        onWillDisappear(ev) {
-            if (intervalUpdateInterval$4) {
-                clearInterval(intervalUpdateInterval$4);
-                intervalUpdateInterval$4 = null;
-            }
-        }
-        updateRaidDuration(ev) {
-            const settings = loadSettings();
-            const locationId = globalThis.location;
-            ev.action.setTitle("");
-            if (locationId) {
-                const mapData = getMapData(locationId, settings.pve_map_mode_check);
-                if (mapData) {
-                    ev.action.setTitle(`\n${mapData.raidDuration} min`);
-                }
-                else {
-                    ev.action.setTitle("\nNo Map\nData");
-                }
-            }
-            else {
-                ev.action.setTitle("\nUnknown\nLocation");
-            }
+        render(map) {
+            return `\n${map.raidDuration} min`;
         }
     });
     return _classThis;
 })();
 
-let intervalUpdateInterval$3 = null;
 let TarkovCurrentMapInfo_Players = (() => {
     let _classDecorators = [action({ UUID: "eu.tarkovbot.tools.mapinfo.playercount" })];
     let _classDescriptor;
     let _classExtraInitializers = [];
     let _classThis;
-    let _classSuper = SingletonAction;
+    let _classSuper = MapInfoBaseAction;
     (class extends _classSuper {
         static { _classThis = this; }
         static {
@@ -8880,39 +10442,8 @@ let TarkovCurrentMapInfo_Players = (() => {
             if (_metadata) Object.defineProperty(_classThis, Symbol.metadata, { enumerable: true, configurable: true, writable: true, value: _metadata });
             __runInitializers(_classThis, _classExtraInitializers);
         }
-        async onWillAppear(ev) {
-            this.updatePlayerCount(ev);
-            if (intervalUpdateInterval$3) {
-                clearInterval(intervalUpdateInterval$3);
-                intervalUpdateInterval$3 = null;
-            }
-            const settings = loadSettings();
-            if (settings.map_autoupdate_check) {
-                intervalUpdateInterval$3 = setInterval(() => this.updatePlayerCount(ev), 5000);
-            }
-        }
-        onWillDisappear(ev) {
-            if (intervalUpdateInterval$3) {
-                clearInterval(intervalUpdateInterval$3);
-                intervalUpdateInterval$3 = null;
-            }
-        }
-        updatePlayerCount(ev) {
-            const settings = loadSettings();
-            const locationId = globalThis.location;
-            ev.action.setTitle("");
-            if (locationId) {
-                const mapData = getMapData(locationId, settings.pve_map_mode_check);
-                if (mapData) {
-                    ev.action.setTitle(`\n${mapData.players}`);
-                }
-                else {
-                    ev.action.setTitle("\nNo Map\nData");
-                }
-            }
-            else {
-                ev.action.setTitle("\nUnknown\nLocation");
-            }
+        render(map) {
+            return `\n${map.players}`;
         }
     });
     return _classThis;
@@ -8943,13 +10474,12 @@ let TarkovCurrentMapInfo_BackToProfile = (() => {
     return _classThis;
 })();
 
-let intervalUpdateInterval$2 = null;
 let TarkovCurrentMapInfo_CurrentServer = (() => {
     let _classDecorators = [action({ UUID: "eu.tarkovbot.tools.mapinfo.currentserver" })];
     let _classDescriptor;
     let _classExtraInitializers = [];
     let _classThis;
-    let _classSuper = SingletonAction;
+    let _classSuper = MapInfoBaseAction;
     (class extends _classSuper {
         static { _classThis = this; }
         static {
@@ -8959,109 +10489,31 @@ let TarkovCurrentMapInfo_CurrentServer = (() => {
             if (_metadata) Object.defineProperty(_classThis, Symbol.metadata, { enumerable: true, configurable: true, writable: true, value: _metadata });
             __runInitializers(_classThis, _classExtraInitializers);
         }
-        serverInfo = null;
-        async onWillAppear(ev) {
-            // Initial update
-            await this.updateServerInfo();
-            this.updateServerDisplay(ev);
-            if (intervalUpdateInterval$2) {
-                clearInterval(intervalUpdateInterval$2);
-                intervalUpdateInterval$2 = null;
-            }
-            const settings = loadSettings();
-            if (settings.map_autoupdate_check) {
-                intervalUpdateInterval$2 = setInterval(async () => {
-                    await this.updateServerInfo();
-                    this.updateServerDisplay(ev);
-                }, 5000);
-            }
-        }
-        async onKeyDown(ev) {
-            ev.action.setTitle("Loading...");
-            await this.updateServerInfo();
-            this.updateServerDisplay(ev);
-        }
-        onWillDisappear(ev) {
-            if (intervalUpdateInterval$2) {
-                clearInterval(intervalUpdateInterval$2);
-                intervalUpdateInterval$2 = null;
-            }
-        }
-        async updateServerInfo() {
-            const settings = loadSettings();
+        lastDatacenter = null;
+        async computeTitle() {
+            const settings = settingsService.load();
             try {
-                this.serverInfo = await findServerFromLogs(settings.eftInstallPath);
+                const info = await findServerFromLogs(settings.eftInstallPath);
+                this.lastDatacenter = info?.datacenter ?? null;
             }
-            catch (error) {
-                // Silent fail
+            catch {
+                // keep last known
             }
+            if (this.lastDatacenter) {
+                return `\n\n${formatDatacenter(this.lastDatacenter)}`;
+            }
+            return "\n\nNo\nServer\nFound";
         }
-        updateServerDisplay(ev) {
-            if (this.serverInfo && this.serverInfo.datacenter) {
-                const formattedDatacenter = this.serverInfo.datacenter.replace("North America", "NA").replace(" -", "").replace(/ /g, "\n");
-                ev.action.setTitle(`\n\n${formattedDatacenter}`);
-            }
-            else {
-                ev.action.setTitle("\n\nNo\nServer\nFound");
-            }
-        }
-        onDidReceiveSettings(ev) {
-            const { map_autoupdate_check: newAutoUpdate, pve_map_mode_check: newPveMode } = ev.payload.settings;
-            // Update the settings file
-            try {
-                let existingData = {};
-                if (fs$1.existsSync(SETTINGS_FILE_PATH)) {
-                    const fileData = fs$1.readFileSync(SETTINGS_FILE_PATH, "utf8");
-                    existingData = JSON.parse(fileData);
-                }
-                const updatedData = {
-                    ...existingData,
-                    current_map_info: {
-                        ...existingData["current_map_info"],
-                        map_autoupdate_check: newAutoUpdate || false,
-                        pve_map_mode_check: newPveMode || false
-                    }
-                };
-                fs$1.writeFileSync(SETTINGS_FILE_PATH, JSON.stringify(updatedData, null, 4));
-                // Restart interval if needed
-                if (intervalUpdateInterval$2) {
-                    clearInterval(intervalUpdateInterval$2);
-                    intervalUpdateInterval$2 = null;
-                }
-                if (newAutoUpdate) {
-                    intervalUpdateInterval$2 = setInterval(async () => {
-                        await this.updateServerInfo();
-                        this.updateServerDisplay(ev.action);
-                    }, 5000);
-                }
-            }
-            catch (error) {
-                // Silent fail
-            }
+        render(_map) {
+            return "";
         }
     });
     return _classThis;
 })();
 
-let intervalUpdateInterval$1;
-const datacenterAPI = "https://tarkovbot.eu/api/streamdeck/v2/eft-datacenters";
-let datacenterData = {};
-async function refreshDatacenterData() {
-    try {
-        const response = await fetch(datacenterAPI);
-        const jsonData = await response.json();
-        if (jsonData && typeof jsonData === "object") {
-            datacenterData = jsonData;
-            globalThis.datacentersData = datacenterData;
-            streamDeck.logger.info("Datacenter list updated.");
-        }
-    }
-    catch (error) {
-        streamDeck.logger.error("Error fetching datacenter data:", error);
-    }
-}
-refreshDatacenterData();
-setInterval(refreshDatacenterData, 3600000);
+const DEFAULT_TITLE = `Get\nCurrent\nServer`;
+const LOADING_TITLE = `Loading...`;
+const NO_SERVER_TITLE = `No\nServer\nFound`;
 let TarkovCurrentServerInfo = (() => {
     let _classDecorators = [action({ UUID: "eu.tarkovbot.tools.raidserver" })];
     let _classDescriptor;
@@ -9077,116 +10529,109 @@ let TarkovCurrentServerInfo = (() => {
             if (_metadata) Object.defineProperty(_classThis, Symbol.metadata, { enumerable: true, configurable: true, writable: true, value: _metadata });
             __runInitializers(_classThis, _classExtraInitializers);
         }
+        timers = new Map();
+        generations = new Map();
         async onWillAppear(ev) {
-            ev.action.setTitle(`Get\nCurrent\nServer`);
+            await this.maybeInheritFromGlobal(ev.action, ev.payload.settings ?? {});
+            ev.action.setTitle(DEFAULT_TITLE);
         }
         async onKeyDown(ev) {
-            ev.action.setTitle(`Loading...`);
-            const { eft_install_path, raid_autoupdate_check } = ev.payload.settings;
-            if (intervalUpdateInterval$1) {
-                clearInterval(intervalUpdateInterval$1);
-                intervalUpdateInterval$1 = null;
-            }
+            const actionId = ev.action.id;
+            this.stopTimer(actionId);
+            const gen = this.bumpGen(actionId);
+            ev.action.setTitle(LOADING_TITLE);
+            const settings = settingsService.load();
+            const actionSettings = ev.payload.settings ?? {};
+            const eftInstallPath = settings.eftInstallPath || actionSettings.eft_install_path || "";
+            const raidAutoUpdate = !!(actionSettings.raid_autoupdate_check ?? settings.raid_autoupdate_check);
             const updateUI = async () => {
-                const info = await findServerFromLogs(eft_install_path);
+                if (this.generations.get(actionId) !== gen) {
+                    this.stopTimer(actionId);
+                    return null;
+                }
+                const info = await findServerFromLogs(eftInstallPath);
+                if (this.generations.get(actionId) !== gen) {
+                    this.stopTimer(actionId);
+                    return null;
+                }
                 if (info) {
-                    const formatted = info.datacenter
-                        .replace("North America", "NA")
-                        .replace(" -", "")
-                        .replace(/ /g, "\n");
-                    ev.action.setTitle(formatted);
+                    ev.action.setTitle(formatDatacenter(info.datacenter));
                 }
                 else {
-                    ev.action.setTitle(`No\nServer\nFound`);
+                    ev.action.setTitle(NO_SERVER_TITLE);
                 }
                 return info;
             };
-            if (raid_autoupdate_check) {
-                intervalUpdateInterval$1 = setInterval(updateUI, 3000);
+            if (raidAutoUpdate) {
+                await updateUI();
+                if (this.generations.get(actionId) !== gen)
+                    return;
+                const timer = setInterval(() => void updateUI(), INTERVALS.MAP_DISCOVERY);
+                this.timers.set(actionId, timer);
             }
             else {
                 const info = await updateUI();
+                if (this.generations.get(actionId) !== gen)
+                    return;
                 if (info) {
-                    setTimeout(() => ev.action.setTitle(`Get\nCurrent\nServer`), 5000);
+                    setTimeout(() => {
+                        if (this.generations.get(actionId) === gen && !this.timers.has(actionId)) {
+                            ev.action.setTitle(DEFAULT_TITLE);
+                        }
+                    }, 5_000);
                 }
             }
         }
         onDidReceiveSettings(ev) {
-            const { eft_install_path, raid_autoupdate_check } = ev.payload.settings;
-            globalThis.eftInstallPath = eft_install_path;
-            globalThis.raid_autoupdate_check = raid_autoupdate_check;
-            streamDeck.logger.info("Received settings:", ev.payload.settings);
-            const updatedData = {
-                global: {
-                    eft_install_path,
-                },
-                current_server_info: {
-                    raid_autoupdate_check,
-                },
-            };
-            saveSettings(updatedData);
+            const { eft_install_path, raid_autoupdate_check } = ev.payload.settings ?? {};
+            settingsService.save({
+                global: { eft_install_path },
+                current_server_info: { raid_autoupdate_check },
+            });
         }
         onWillDisappear(ev) {
-            if (intervalUpdateInterval$1) {
-                clearInterval(intervalUpdateInterval$1);
-                intervalUpdateInterval$1 = null;
-            }
+            this.stopTimer(ev.action.id);
         }
         async onSendToPlugin(ev) {
-            const payload = ev.payload;
-            streamDeck.logger.info("onSendToPlugin received:", JSON.stringify(payload));
-            if (ev.payload === 'openPatreon') {
-                streamDeck.system.openUrl('https://patreon.com/tarkovboteu');
+            const handled = await handleCommonCommands(ev);
+            if (handled)
+                return;
+            streamDeck.logger.info("raidserver onSendToPlugin (unhandled):", JSON.stringify(ev.payload));
+        }
+        stopTimer(actionId) {
+            const t = this.timers.get(actionId);
+            if (t) {
+                clearInterval(t);
+                this.timers.delete(actionId);
             }
-            if (payload.command === "autoDetectPath") {
-                streamDeck.logger.info("Starting auto-detect path...");
-                const result = await detectEftPath();
-                streamDeck.logger.info("Auto-detect result:", JSON.stringify(result));
-                if (result.success && result.path) {
-                    // Update the action settings with the detected path
-                    await ev.action.setSettings({
-                        ...await ev.action.getSettings(),
-                        eft_install_path: result.path
-                    });
-                    // Save to global settings
-                    saveSettings({
-                        global: { eft_install_path: result.path }
-                    });
-                    // Send success response back to property inspector
-                    await streamDeck.ui.current?.sendToPropertyInspector({
-                        event: "autoDetectResult",
-                        success: true,
-                        path: result.path
-                    });
-                }
-                else {
-                    // Send error response
-                    await streamDeck.ui.current?.sendToPropertyInspector({
-                        event: "autoDetectResult",
-                        success: false,
-                        error: result.error
-                    });
-                }
+            this.bumpGen(actionId);
+        }
+        bumpGen(actionId) {
+            const gen = (this.generations.get(actionId) ?? 0) + 1;
+            this.generations.set(actionId, gen);
+            return gen;
+        }
+        async maybeInheritFromGlobal(action, settings) {
+            const global = settingsService.load();
+            const inherited = { ...settings };
+            let changed = false;
+            if (!settings.eft_install_path && global.eftInstallPath) {
+                inherited.eft_install_path = global.eftInstallPath;
+                changed = true;
             }
-            else if (payload.command === "getGlobalSettings") {
-                const settings = loadSettings();
-                streamDeck.logger.info("Sending global settings:", settings.eftInstallPath);
-                await streamDeck.ui.current?.sendToPropertyInspector({
-                    event: "globalSettings",
-                    eft_install_path: settings.eftInstallPath
-                });
+            if (settings.raid_autoupdate_check === undefined && global.raid_autoupdate_check) {
+                inherited.raid_autoupdate_check = global.raid_autoupdate_check;
+                changed = true;
+            }
+            if (changed) {
+                await action.setSettings(inherited);
+                settingsService.invalidateCache();
             }
         }
     });
     return _classThis;
 })();
 
-let intervalUpdateInterval = null;
-let lastPveMode = null;
-// Global variables to track map changes for all boss instances
-let currentGlobalLocationId = null;
-let lastImageFetchMap = null;
-let bossImageCache = {};
 let TarkovCurrentMapInfo_Boss = (() => {
     let _classDecorators = [action({ UUID: "eu.tarkovbot.tools.mapinfo.boss" })];
     let _classDescriptor;
@@ -9203,140 +10648,60 @@ let TarkovCurrentMapInfo_Boss = (() => {
             __runInitializers(_classThis, _classExtraInitializers);
         }
         bossIndex;
-        activeInstance = false;
-        updateInterval = null;
+        timer = null;
+        lastGameMode = null;
         constructor(bossIndex) {
             super();
             this.bossIndex = bossIndex;
         }
         async onWillAppear(ev) {
-            this.activeInstance = true;
-            // Clear display on initial appearance
-            this.clearBossDisplay(ev);
-            const settings = loadSettings();
-            // Set up map change tracking interval ONLY if auto-update is enabled
-            if (intervalUpdateInterval === null && settings.map_autoupdate_check) {
-                currentGlobalLocationId = globalThis.location;
-                intervalUpdateInterval = setInterval(() => {
-                    const newLocationId = globalThis.location;
-                    if (newLocationId !== currentGlobalLocationId) {
-                        bossImageCache = {};
-                        lastImageFetchMap = null;
-                        currentGlobalLocationId = newLocationId;
-                    }
-                }, 3000);
-            }
-            // Initial update - Always run this
             await this.updateBossInfo(ev);
-            // Set up periodic update ONLY if auto-update is enabled
+            const settings = settingsService.load();
             if (settings.map_autoupdate_check) {
-                this.updateInterval = setInterval(async () => {
-                    if (!this.activeInstance) {
-                        this.clearUpdateInterval();
-                        return;
-                    }
-                    await this.updateBossInfo(ev);
-                }, 5000);
+                this.timer = setInterval(() => void this.updateBossInfo(ev), INTERVALS.MAP_INFO_AUTO_UPDATE);
             }
         }
-        onWillDisappear(ev) {
-            this.activeInstance = false;
-            this.clearUpdateInterval();
-        }
-        clearUpdateInterval() {
-            if (this.updateInterval) {
-                clearInterval(this.updateInterval);
-                this.updateInterval = null;
+        onWillDisappear(_ev) {
+            if (this.timer) {
+                clearInterval(this.timer);
+                this.timer = null;
             }
-        }
-        // Helper method to clear the display
-        async clearBossDisplay(ev) {
-            ev.action.setTitle("");
-            ev.action.setImage("");
         }
         async updateBossInfo(ev) {
-            // Reload settings on each update to detect changes
-            const settings = loadSettings();
-            // Check if PVE mode has changed
-            if (lastPveMode !== settings.pve_map_mode_check) {
-                lastImageFetchMap = null;
-                bossImageCache = {};
-                lastPveMode = settings.pve_map_mode_check;
+            const settings = settingsService.load();
+            if (this.lastGameMode !== null && this.lastGameMode !== settings.game_mode) {
+                tarkovApiService.invalidateBossImageCache();
             }
-            const locationId = globalThis.location;
-            // Do nothing if location is not available
+            this.lastGameMode = settings.game_mode;
+            const locationId = stateService.currentLocationId;
             if (!locationId) {
                 ev.action.setTitle("\nUnknown\nLocation");
                 return;
             }
-            // Get the correct map data source based on settings
-            const mapData = getMapData(locationId, settings.pve_map_mode_check);
-            // Handle no map data case
+            const mapData = stateService.getMapData(locationId, settings.game_mode);
             if (!mapData) {
                 ev.action.setTitle("\nNo Map\nData");
                 return;
             }
-            // Check if bosses array exists and has enough elements
-            if (!mapData.bosses || this.bossIndex >= mapData.bosses.length) {
-                this.clearBossDisplay(ev);
-                return;
-            }
-            // Get boss data for this index
-            const boss = mapData.bosses[this.bossIndex];
+            const boss = mapData.bosses?.[this.bossIndex];
             if (!boss) {
-                this.clearBossDisplay(ev);
+                ev.action.setTitle("");
+                ev.action.setImage("");
                 return;
             }
-            // Format boss name
-            let bossNameFormatted = boss.name.split(" ").join("\n");
-            if (bossNameFormatted === "Knight")
-                bossNameFormatted = "Goons";
-            if (bossNameFormatted === "Cultist\nPriest")
-                bossNameFormatted = "Cultists";
-            // Set title
-            ev.action.setTitle(`${bossNameFormatted}\n${boss.spawnChance}`);
-            // Image fetching logic
-            // Always attempt to fetch/use image, but only re-fetch when map changes
-            if (locationId !== lastImageFetchMap) {
-                if (!bossImageCache[boss.id]) {
-                    const imageUrl = `https://tarkovbot.eu/streamdeck/img/${boss.id}.webp`;
-                    const fallbackUrl = `https://tarkovbot.eu/streamdeck/img/unknown_boss.webp`;
-                    try {
-                        const base64Image = await this.fetchBase64Image(imageUrl, fallbackUrl);
-                        if (base64Image) {
-                            bossImageCache[boss.id] = base64Image;
-                        }
-                    }
-                    catch (error) {
-                        streamDeck.logger.error(`Error fetching boss image for ${boss.id}:`, error);
-                    }
-                }
-                if (bossImageCache[boss.id]) {
-                    ev.action.setImage(bossImageCache[boss.id]);
-                }
+            ev.action.setTitle(`${this.formatBossName(boss.name)}\n${boss.spawnChance}`);
+            const image = await tarkovApiService.getBossImage(boss.id);
+            if (image) {
+                ev.action.setImage(image);
             }
-            else if (bossImageCache[boss.id]) {
-                ev.action.setImage(bossImageCache[boss.id]);
-            }
-            // Record that we've fetched images for this map
-            lastImageFetchMap = locationId;
         }
-        async fetchBase64Image(url, fallbackUrl) {
-            try {
-                let response = await fetch(url);
-                if (!response.ok && fallbackUrl) {
-                    response = await fetch(fallbackUrl);
-                }
-                if (!response.ok) {
-                    return null;
-                }
-                const arrayBuffer = await response.arrayBuffer();
-                return `data:image/webp;base64,${Buffer.from(arrayBuffer).toString("base64")}`;
-            }
-            catch (error) {
-                streamDeck.logger.error("Failed to fetch image:", error);
-                return null;
-            }
+        formatBossName(name) {
+            let formatted = name.split(" ").join("\n");
+            if (formatted === "Knight")
+                formatted = "Goons";
+            if (formatted === "Cultist\nPriest")
+                formatted = "Cultists";
+            return formatted;
         }
     });
     return _classThis;
@@ -9357,9 +10722,7 @@ let TarkovCurrentMapInfo_Boss_First = (() => {
             if (_metadata) Object.defineProperty(_classThis, Symbol.metadata, { enumerable: true, configurable: true, writable: true, value: _metadata });
             __runInitializers(_classThis, _classExtraInitializers);
         }
-        constructor() {
-            super(0);
-        }
+        constructor() { super(0); }
     });
     return _classThis;
 })();
@@ -9378,9 +10741,7 @@ let TarkovCurrentMapInfo_Boss_Second = (() => {
             if (_metadata) Object.defineProperty(_classThis, Symbol.metadata, { enumerable: true, configurable: true, writable: true, value: _metadata });
             __runInitializers(_classThis, _classExtraInitializers);
         }
-        constructor() {
-            super(1);
-        }
+        constructor() { super(1); }
     });
     return _classThis;
 })();
@@ -9399,9 +10760,7 @@ let TarkovCurrentMapInfo_Boss_Third = (() => {
             if (_metadata) Object.defineProperty(_classThis, Symbol.metadata, { enumerable: true, configurable: true, writable: true, value: _metadata });
             __runInitializers(_classThis, _classExtraInitializers);
         }
-        constructor() {
-            super(2);
-        }
+        constructor() { super(2); }
     });
     return _classThis;
 })();
@@ -9420,9 +10779,7 @@ let TarkovCurrentMapInfo_Boss_Fourth = (() => {
             if (_metadata) Object.defineProperty(_classThis, Symbol.metadata, { enumerable: true, configurable: true, writable: true, value: _metadata });
             __runInitializers(_classThis, _classExtraInitializers);
         }
-        constructor() {
-            super(3);
-        }
+        constructor() { super(3); }
     });
     return _classThis;
 })();
@@ -9441,9 +10798,7 @@ let TarkovCurrentMapInfo_Boss_Fifth = (() => {
             if (_metadata) Object.defineProperty(_classThis, Symbol.metadata, { enumerable: true, configurable: true, writable: true, value: _metadata });
             __runInitializers(_classThis, _classExtraInitializers);
         }
-        constructor() {
-            super(4);
-        }
+        constructor() { super(4); }
     });
     return _classThis;
 })();
@@ -9462,9 +10817,7 @@ let TarkovCurrentMapInfo_Boss_Sixth = (() => {
             if (_metadata) Object.defineProperty(_classThis, Symbol.metadata, { enumerable: true, configurable: true, writable: true, value: _metadata });
             __runInitializers(_classThis, _classExtraInitializers);
         }
-        constructor() {
-            super(5);
-        }
+        constructor() { super(5); }
     });
     return _classThis;
 })();
@@ -9483,9 +10836,7 @@ let TarkovCurrentMapInfo_Boss_Seventh = (() => {
             if (_metadata) Object.defineProperty(_classThis, Symbol.metadata, { enumerable: true, configurable: true, writable: true, value: _metadata });
             __runInitializers(_classThis, _classExtraInitializers);
         }
-        constructor() {
-            super(6);
-        }
+        constructor() { super(6); }
     });
     return _classThis;
 })();
@@ -9504,9 +10855,7 @@ let TarkovCurrentMapInfo_Boss_Eighth = (() => {
             if (_metadata) Object.defineProperty(_classThis, Symbol.metadata, { enumerable: true, configurable: true, writable: true, value: _metadata });
             __runInitializers(_classThis, _classExtraInitializers);
         }
-        constructor() {
-            super(7);
-        }
+        constructor() { super(7); }
     });
     return _classThis;
 })();
@@ -9525,9 +10874,7 @@ let TarkovCurrentMapInfo_Boss_Ninth = (() => {
             if (_metadata) Object.defineProperty(_classThis, Symbol.metadata, { enumerable: true, configurable: true, writable: true, value: _metadata });
             __runInitializers(_classThis, _classExtraInitializers);
         }
-        constructor() {
-            super(8);
-        }
+        constructor() { super(8); }
     });
     return _classThis;
 })();
@@ -9546,9 +10893,7 @@ let TarkovCurrentMapInfo_Boss_Tenth = (() => {
             if (_metadata) Object.defineProperty(_classThis, Symbol.metadata, { enumerable: true, configurable: true, writable: true, value: _metadata });
             __runInitializers(_classThis, _classExtraInitializers);
         }
-        constructor() {
-            super(9);
-        }
+        constructor() { super(9); }
     });
     return _classThis;
 })();
@@ -9567,9 +10912,7 @@ let TarkovCurrentMapInfo_Boss_Eleventh = (() => {
             if (_metadata) Object.defineProperty(_classThis, Symbol.metadata, { enumerable: true, configurable: true, writable: true, value: _metadata });
             __runInitializers(_classThis, _classExtraInitializers);
         }
-        constructor() {
-            super(10);
-        }
+        constructor() { super(10); }
     });
     return _classThis;
 })();
@@ -9588,9 +10931,7 @@ let TarkovCurrentMapInfo_Boss_Twelfth = (() => {
             if (_metadata) Object.defineProperty(_classThis, Symbol.metadata, { enumerable: true, configurable: true, writable: true, value: _metadata });
             __runInitializers(_classThis, _classExtraInitializers);
         }
-        constructor() {
-            super(11);
-        }
+        constructor() { super(11); }
     });
     return _classThis;
 })();
@@ -9609,9 +10950,7 @@ let TarkovCurrentMapInfo_Boss_Thirteenth = (() => {
             if (_metadata) Object.defineProperty(_classThis, Symbol.metadata, { enumerable: true, configurable: true, writable: true, value: _metadata });
             __runInitializers(_classThis, _classExtraInitializers);
         }
-        constructor() {
-            super(12);
-        }
+        constructor() { super(12); }
     });
     return _classThis;
 })();
@@ -9630,9 +10969,7 @@ let TarkovCurrentMapInfo_Boss_Fourteenth = (() => {
             if (_metadata) Object.defineProperty(_classThis, Symbol.metadata, { enumerable: true, configurable: true, writable: true, value: _metadata });
             __runInitializers(_classThis, _classExtraInitializers);
         }
-        constructor() {
-            super(13);
-        }
+        constructor() { super(13); }
     });
     return _classThis;
 })();
@@ -9651,9 +10988,7 @@ let TarkovCurrentMapInfo_Boss_Fifteenth = (() => {
             if (_metadata) Object.defineProperty(_classThis, Symbol.metadata, { enumerable: true, configurable: true, writable: true, value: _metadata });
             __runInitializers(_classThis, _classExtraInitializers);
         }
-        constructor() {
-            super(14);
-        }
+        constructor() { super(14); }
     });
     return _classThis;
 })();
@@ -9672,16 +11007,52 @@ let TarkovCurrentMapInfo_Boss_Sixteenth = (() => {
             if (_metadata) Object.defineProperty(_classThis, Symbol.metadata, { enumerable: true, configurable: true, writable: true, value: _metadata });
             __runInitializers(_classThis, _classExtraInitializers);
         }
-        constructor() {
-            super(15);
-        }
+        constructor() { super(15); }
     });
     return _classThis;
 })();
+function createAllBossInstances() {
+    return [
+        new TarkovCurrentMapInfo_Boss_First(),
+        new TarkovCurrentMapInfo_Boss_Second(),
+        new TarkovCurrentMapInfo_Boss_Third(),
+        new TarkovCurrentMapInfo_Boss_Fourth(),
+        new TarkovCurrentMapInfo_Boss_Fifth(),
+        new TarkovCurrentMapInfo_Boss_Sixth(),
+        new TarkovCurrentMapInfo_Boss_Seventh(),
+        new TarkovCurrentMapInfo_Boss_Eighth(),
+        new TarkovCurrentMapInfo_Boss_Ninth(),
+        new TarkovCurrentMapInfo_Boss_Tenth(),
+        new TarkovCurrentMapInfo_Boss_Eleventh(),
+        new TarkovCurrentMapInfo_Boss_Twelfth(),
+        new TarkovCurrentMapInfo_Boss_Thirteenth(),
+        new TarkovCurrentMapInfo_Boss_Fourteenth(),
+        new TarkovCurrentMapInfo_Boss_Fifteenth(),
+        new TarkovCurrentMapInfo_Boss_Sixteenth(),
+    ];
+}
 
-/*
-streamDeck.logger.setLevel("trace");
-*/
+const ALL_GAME_MODES = ["PVP", "PVE", "SEASON"];
+
+let started = false;
+function startBackgroundRefreshers() {
+    if (started)
+        return;
+    started = true;
+    for (const mode of ALL_GAME_MODES) {
+        tarkovApiService.refreshMapsAsync(mode);
+        tarkovApiService.refreshTradersAsync(mode);
+    }
+    tarkovApiService.refreshLocalMapNamesAsync();
+    tarkovApiService.refreshDatacentersAsync();
+    for (const mode of ALL_GAME_MODES) {
+        setInterval(() => tarkovApiService.refreshMapsAsync(mode), INTERVALS.MAP_DATA_REFRESH);
+        setInterval(() => tarkovApiService.refreshTradersAsync(mode), INTERVALS.TRADER_DATA_REFRESH);
+    }
+    setInterval(() => tarkovApiService.refreshDatacentersAsync(), INTERVALS.DATACENTER_REFRESH);
+}
+
+startBackgroundRefreshers();
 streamDeck.actions.registerAction(new TarkovTime());
 streamDeck.actions.registerAction(new TarkovGoonsLocation());
 streamDeck.actions.registerAction(new TarkovTraderRestock());
@@ -9689,24 +11060,11 @@ streamDeck.actions.registerAction(new TarkovCurrentMapInfo());
 streamDeck.actions.registerAction(new TarkovCurrentMapInfo_Name());
 streamDeck.actions.registerAction(new TarkovCurrentMapInfo_Duration());
 streamDeck.actions.registerAction(new TarkovCurrentMapInfo_Players());
-streamDeck.actions.registerAction(new TarkovCurrentMapInfo_Boss_First());
-streamDeck.actions.registerAction(new TarkovCurrentMapInfo_Boss_Second());
-streamDeck.actions.registerAction(new TarkovCurrentMapInfo_Boss_Third());
-streamDeck.actions.registerAction(new TarkovCurrentMapInfo_Boss_Fourth());
-streamDeck.actions.registerAction(new TarkovCurrentMapInfo_Boss_Fifth());
-streamDeck.actions.registerAction(new TarkovCurrentMapInfo_Boss_Sixth());
-streamDeck.actions.registerAction(new TarkovCurrentMapInfo_Boss_Seventh());
-streamDeck.actions.registerAction(new TarkovCurrentMapInfo_Boss_Eighth());
-streamDeck.actions.registerAction(new TarkovCurrentMapInfo_Boss_Ninth());
-streamDeck.actions.registerAction(new TarkovCurrentMapInfo_Boss_Tenth());
-streamDeck.actions.registerAction(new TarkovCurrentMapInfo_Boss_Eleventh());
-streamDeck.actions.registerAction(new TarkovCurrentMapInfo_Boss_Twelfth());
-streamDeck.actions.registerAction(new TarkovCurrentMapInfo_Boss_Thirteenth());
-streamDeck.actions.registerAction(new TarkovCurrentMapInfo_Boss_Fourteenth());
-streamDeck.actions.registerAction(new TarkovCurrentMapInfo_Boss_Fifteenth());
-streamDeck.actions.registerAction(new TarkovCurrentMapInfo_Boss_Sixteenth());
 streamDeck.actions.registerAction(new TarkovCurrentMapInfo_CurrentServer());
 streamDeck.actions.registerAction(new TarkovCurrentMapInfo_BackToProfile());
+for (const bossInstance of createAllBossInstances()) {
+    streamDeck.actions.registerAction(bossInstance);
+}
 streamDeck.actions.registerAction(new TarkovCurrentServerInfo());
 streamDeck.connect();
 //# sourceMappingURL=plugin.js.map

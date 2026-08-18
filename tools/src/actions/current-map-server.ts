@@ -1,108 +1,29 @@
-import {
-	streamDeck,
-	action,
-	SingletonAction,
-	WillAppearEvent,
-	WillDisappearEvent,
-	DidReceiveSettingsEvent,
-	KeyDownEvent
-} from "@elgato/streamdeck";
-import fs from "fs";
-import { loadSettings, saveSettings, SETTINGS_FILE_PATH } from "../utils/settings";
-import { findServerFromLogs } from "../utils/log-parser";
-
-let intervalUpdateInterval: NodeJS.Timeout | null = null;
+import { action } from "@elgato/streamdeck";
+import type { MapData } from "../types";
+import { MapInfoBaseAction } from "./base/map-info-base";
+import { settingsService } from "../services/settings-service";
+import { findServerFromLogs } from "../services/log-service";
+import { formatDatacenter } from "../utils/time-format";
 
 @action({ UUID: "eu.tarkovbot.tools.mapinfo.currentserver" })
-export class TarkovCurrentMapInfo_CurrentServer extends SingletonAction {
-	private serverInfo: { sid: string, datacenter: string } | null = null;
+export class TarkovCurrentMapInfo_CurrentServer extends MapInfoBaseAction {
+    private lastDatacenter: string | null = null;
 
-	override async onWillAppear(ev: WillAppearEvent): Promise<void> {
-		// Initial update
-		await this.updateServerInfo();
-		this.updateServerDisplay(ev);
+    protected override async computeTitle(): Promise<string> {
+        const settings = settingsService.load();
+        try {
+            const info = await findServerFromLogs(settings.eftInstallPath);
+            this.lastDatacenter = info?.datacenter ?? null;
+        } catch {
+            // keep last known
+        }
+        if (this.lastDatacenter) {
+            return `\n\n${formatDatacenter(this.lastDatacenter)}`;
+        }
+        return "\n\nNo\nServer\nFound";
+    }
 
-		if (intervalUpdateInterval) {
-			clearInterval(intervalUpdateInterval);
-			intervalUpdateInterval = null;
-		}
-
-		const settings = loadSettings();
-		if (settings.map_autoupdate_check) {
-			intervalUpdateInterval = setInterval(async () => {
-				await this.updateServerInfo();
-				this.updateServerDisplay(ev);
-			}, 5000);
-		}
-	}
-
-	override async onKeyDown(ev: KeyDownEvent): Promise<void> {
-		ev.action.setTitle("Loading...");
-		await this.updateServerInfo();
-		this.updateServerDisplay(ev);
-	}
-
-	override onWillDisappear(ev: WillDisappearEvent): void {
-		if (intervalUpdateInterval) {
-			clearInterval(intervalUpdateInterval);
-			intervalUpdateInterval = null;
-		}
-	}
-
-	private async updateServerInfo(): Promise<void> {
-		const settings = loadSettings();
-		try {
-			this.serverInfo = await findServerFromLogs(settings.eftInstallPath);
-		} catch (error) {
-			// Silent fail
-		}
-	}
-
-	private updateServerDisplay(ev: WillAppearEvent): void {
-		if (this.serverInfo && this.serverInfo.datacenter) {
-			const formattedDatacenter = this.serverInfo.datacenter.replace("North America", "NA").replace(" -", "").replace(/ /g, "\n");
-			ev.action.setTitle(`\n\n${formattedDatacenter}`);
-		} else {
-			ev.action.setTitle("\n\nNo\nServer\nFound");
-		}
-	}
-
-	override onDidReceiveSettings(ev: DidReceiveSettingsEvent): void {
-		const { map_autoupdate_check: newAutoUpdate, pve_map_mode_check: newPveMode } = ev.payload.settings;
-
-		// Update the settings file
-		try {
-			let existingData: Record<string, any> = {};
-			if (fs.existsSync(SETTINGS_FILE_PATH)) {
-				const fileData = fs.readFileSync(SETTINGS_FILE_PATH, "utf8");
-				existingData = JSON.parse(fileData);
-			}
-
-			const updatedData = {
-				...existingData,
-				current_map_info: {
-					...existingData["current_map_info"],
-					map_autoupdate_check: newAutoUpdate || false,
-					pve_map_mode_check: newPveMode || false
-				}
-			};
-
-			fs.writeFileSync(SETTINGS_FILE_PATH, JSON.stringify(updatedData, null, 4));
-
-			// Restart interval if needed
-			if (intervalUpdateInterval) {
-				clearInterval(intervalUpdateInterval);
-				intervalUpdateInterval = null;
-			}
-
-			if (newAutoUpdate) {
-				intervalUpdateInterval = setInterval(async () => {
-					await this.updateServerInfo();
-					this.updateServerDisplay(ev.action);
-				}, 5000);
-			}
-		} catch (error) {
-			// Silent fail
-		}
-	}
+    protected render(_map: MapData): string {
+        return "";
+    }
 }

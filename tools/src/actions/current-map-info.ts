@@ -1,355 +1,184 @@
 import {
-    streamDeck,
     action,
+    streamDeck,
+    DidReceiveSettingsEvent,
+    KeyDownEvent,
+    SendToPluginEvent,
     SingletonAction,
     WillAppearEvent,
-    KeyDownEvent,
-    DidReceiveSettingsEvent,
-    SendToPluginEvent,
+    WillDisappearEvent,
 } from "@elgato/streamdeck";
-import fs from "fs";
-import path from "path";
-import { loadSettings, saveSettings, SETTINGS_FILE_PATH } from "../utils/settings";
-import { extractTimestamp, getLatestLogFile } from "../utils/log-parser";
-import { detectEftPath } from "../utils/eft-path";
+import type { JsonValue, JsonObject } from "@elgato/utils";
+import { DEVICE_PROFILE_MAP, INTERVALS } from "../config/constants";
+import { handleCommonCommands } from "./base/command-handler";
+import { settingsService } from "../services/settings-service";
+import { stateService } from "../services/state-service";
+import { findCurrentMapFromLogs } from "../services/log-service";
+import type { GameMode, MapInfoSettings } from "../types";
 
-interface BossHealth {
-    bodyPart: string;
-    max: number;
+const SELECT_MODE_TITLE = "Select\nGame\nMode";
+
+function isValidGameMode(mode: unknown): mode is GameMode {
+    return mode === "PVP" || mode === "PVE" || mode === "SEASON";
 }
 
-interface Boss {
-    spawnChance: number;
-    boss: any;
-    id: string;
-    name: string;
-    health: BossHealth[];
-
+function migrateLegacy(settings: MapInfoSettings): MapInfoSettings {
+    if (isValidGameMode(settings.game_mode)) return settings;
+    const legacy = (settings as any).pve_map_mode_check;
+    if (typeof legacy !== "boolean") return settings;
+    const migrated = { ...settings };
+    migrated.game_mode = legacy ? "PVE" : "PVP";
+    delete (migrated as any).pve_map_mode_check;
+    return migrated;
 }
-
-interface MapData {
-    id: string;
-    name: string;
-    nameId: string;
-    accessKeysMinPlayerLevel: number;
-    raidDuration: number;
-    players: string;
-    accessKeys: any[];
-    bosses: Boss[];
-}
-
-interface LocalMapEntry {
-    localIDs: string[];
-    dataID: string;
-}
-
-interface ApiResponse {
-    maps: MapData[];
-}
-
-const apiURLs = {
-    PVE: "https://tarkovbot.eu/api/pve/streamdeck/maps",
-    PVP: "https://tarkovbot.eu/api/streamdeck/maps",
-    LOCAL_MAP_NAMES: "https://tarkovbot.eu/api/pve/streamdeck/local-map-names"
-};
-
-async function refreshData(mode: 'PVE' | 'PVP'): Promise<void> {
-    const apiURL = apiURLs[mode];
-    try {
-        const response = await fetch(apiURL);
-        const jsonData = await response.json();
-
-        if (isApiResponse(jsonData)) {
-            const locationsData = jsonData.maps.map(map => {
-                const bossMap = new Map<string, { id: string; spawnChances: number[] }>();
-
-                map.bosses.forEach(bossData => {
-                    const bossName = bossData.boss.name;
-                    const bossId = bossData.boss.id;
-                    const spawnChance = (bossData.spawnChance * 100).toFixed(0);
-
-                    if (!bossMap.has(bossName)) {
-                        bossMap.set(bossName, { id: bossId, spawnChances: [] });
-                    }
-                    bossMap.get(bossName)!.spawnChances.push(Number(spawnChance));
-                });
-
-                const consolidatedBosses = Array.from(bossMap).map(([name, { id, spawnChances }]) => {
-                    const lowest = Math.min(...spawnChances);
-                    const highest = Math.max(...spawnChances);
-                    const spawnChanceString = lowest === highest ? `${lowest}%` : `${lowest}-${highest}%`;
-                    return { name, spawnChance: spawnChanceString, id };
-                });
-
-                return {
-                    ...map,
-                    bosses: consolidatedBosses
-                };
-            });
-
-            globalThis[`locationsData${mode}`] = locationsData;
-            streamDeck.logger.info(`Processed ${mode} Map Data`);
-        }
-    } catch (error) {
-        streamDeck.logger.error(`Error fetching ${mode} data:`, error);
-    }
-}
-
-function isApiResponse(data: any): data is ApiResponse {
-    return data && typeof data === 'object' && Array.isArray(data.maps);
-}
-
-let localMapNames: LocalMapEntry[] = [];
-
-// Refresh local map names
-async function refreshLocalMapNames(): Promise<void> {
-    try {
-        const response = await fetch(apiURLs.LOCAL_MAP_NAMES);
-        const jsonData = await response.json();
-
-        if (isLocalMapNamesArray(jsonData)) {
-            localMapNames = jsonData;
-            streamDeck.logger.info("Local map names loaded successfully");
-        }
-    } catch (error) {
-        streamDeck.logger.error("Error fetching local map names:", error);
-    }
-}
-
-function isLocalMapNamesArray(data: any): data is LocalMapEntry[] {
-    return Array.isArray(data) && data.every(item =>
-        item && typeof item === 'object' &&
-        Array.isArray(item.localIDs) &&
-        typeof item.dataID === 'string'
-    );
-}
-
-refreshLocalMapNames();
-
-refreshData('PVE');
-refreshData('PVP');
-
-
-setInterval(() => refreshData('PVE'), 1200000);
-setInterval(() => refreshData('PVP'), 1200000);
-
-
-let intervalUpdateInterval: any;
 
 @action({ UUID: "eu.tarkovbot.tools.mapinfo" })
 export class TarkovCurrentMapInfo extends SingletonAction {
+    private autoUpdateTimers = new Map<string, NodeJS.Timeout>();
+    private generations = new Map<string, number>();
 
-    override async onWillAppear(ev: WillAppearEvent): Promise<void> {
+    override async onWillAppear(ev: WillAppearEvent<MapInfoSettings>): Promise<void> {
+        const raw = ev.payload.settings ?? ({} as MapInfoSettings);
+        let settings = migrateLegacy(raw);
+        if (settings !== raw) {
+            await ev.action.setSettings(settings as unknown as JsonObject);
+        }
+        settings = await this.maybeInheritFromGlobal(ev.action, settings);
+
+        if (!isValidGameMode(settings.game_mode)) {
+            ev.action.setTitle(SELECT_MODE_TITLE);
+            return;
+        }
+
         ev.action.setTitle(`Get\nCurrent\nMap Info`);
     }
 
-    override async onKeyDown(ev: KeyDownEvent): Promise<void> {
-        const eftInstallPath = ev.payload.settings.eft_install_path;
-        streamDeck.logger.info("Payload settings on keydown: " + JSON.stringify(ev.payload.settings));
+    override async onKeyDown(ev: KeyDownEvent<MapInfoSettings>): Promise<void> {
+        const settings = ev.payload.settings ?? ({} as MapInfoSettings);
 
-        if (intervalUpdateInterval) {
-            clearInterval(intervalUpdateInterval);
-            intervalUpdateInterval = null;
+        if (!isValidGameMode(settings.game_mode)) {
+            ev.action.setTitle(SELECT_MODE_TITLE);
+            return;
         }
 
-        globalThis.location = await this.getLatestMap(eftInstallPath);
+        const global = settingsService.load();
+        const eftInstallPath =
+            global.eftInstallPath || settings.eft_install_path || "";
 
-        if (ev.payload.settings.map_autoupdate_check) {
-            intervalUpdateInterval = setInterval(async () => {
-                globalThis.location = await this.getLatestMap(eftInstallPath);
-                streamDeck.logger.info("Auto-update interval triggered; location:", globalThis.location);
-            }, 3000);
-        } else {
-            streamDeck.logger.info("Auto-update disabled; location:", globalThis.location);
+        this.stopAutoUpdate(ev.action.id);
+
+        const gen = this.bumpGen(ev.action.id);
+
+        stateService.currentLocationId = await findCurrentMapFromLogs(
+            eftInstallPath,
+            settings.game_mode,
+        );
+
+        if (this.generations.get(ev.action.id) !== gen) return;
+
+        if (settings.map_autoupdate_check) {
+            this.autoUpdateTimers.set(
+                ev.action.id,
+                setInterval(async () => {
+                    if (this.generations.get(ev.action.id) !== gen) {
+                        this.stopAutoUpdate(ev.action.id);
+                        return;
+                    }
+                    stateService.currentLocationId = await findCurrentMapFromLogs(
+                        eftInstallPath,
+                        settings.game_mode!,
+                    );
+                }, INTERVALS.MAP_DISCOVERY),
+            );
         }
 
-        if (globalThis.location) {
-            streamDeck.profiles.switchToProfile(ev.action.device.id, await this.getProfilePath(ev.action.device.type));
+        if (stateService.currentLocationId) {
+            streamDeck.profiles.switchToProfile(
+                ev.action.device.id,
+                this.getProfilePath(ev.action.device.type),
+            );
         } else {
             ev.action.setTitle("Not Found");
-            streamDeck.logger.info("Map not found; returned value:", globalThis.location);
         }
     }
 
-    private async getLatestMap(eftPath: any): Promise<string | null> {
-        try {
-            const settings = loadSettings();
-            const pveMode = settings.pve_map_mode_check;
+    private getProfilePath(deviceType: number): string {
+        return DEVICE_PROFILE_MAP[deviceType] ?? "";
+    }
 
-            const logsPath = `${eftPath}\\Logs`;
-            streamDeck.logger.info("Using logs path:", logsPath);
+    override async onDidReceiveSettings(
+        ev: DidReceiveSettingsEvent<MapInfoSettings>,
+    ): Promise<void> {
+        const settings = ev.payload.settings ?? ({} as MapInfoSettings);
 
-            const folders = await fs.promises.readdir(logsPath, { withFileTypes: true });
-            const logFolders = folders
-                .filter(f => f.isDirectory() && f.name.startsWith("log_"))
-                .map(f => ({
-                    dirent: f,
-                    timestamp: extractTimestamp(f.name)
-                }))
-                .sort((a, b) => b.timestamp - a.timestamp)
-                .map(f => f.dirent);
+        if (!isValidGameMode(settings.game_mode)) {
+            ev.action.setTitle(SELECT_MODE_TITLE);
+            this.stopAutoUpdate(ev.action.id);
+            return;
+        }
 
-            if (logFolders.length === 0) {
-                streamDeck.logger.info("No log folders found");
-                return null;
-            }
+        settingsService.setMapInfoFlags({
+            map_autoupdate_check: settings.map_autoupdate_check,
+            game_mode: settings.game_mode,
+        });
 
-            const latestFolder = `${logsPath}\\${logFolders[0].name}`;
-            streamDeck.logger.info("Checking latest log folder:", latestFolder);
-
-            const files = await fs.promises.readdir(latestFolder, { withFileTypes: true });
-            const logFiles = files
-                .filter(f => f.isFile() && f.name.includes("application") && f.name.endsWith(".log"))
-                .sort((a, b) => b.name.localeCompare(a.name));
-
-            if (logFiles.length === 0) {
-                streamDeck.logger.info("No log files found in folder:", latestFolder);
-                return null;
-            }
-
-            const latestFile = `${latestFolder}\\${logFiles[0].name}`;
-            streamDeck.logger.info("Reading latest log file:", latestFile);
-
-            const content = await fs.promises.readFile(latestFile, "utf-8");
-            const lines = content.split("\n");
-
-            // Check based on pve_map_mode_check setting
-            if (pveMode) {
-                // Using scene preset path method for PVE mode
-                let latestMapName = null;
-
-                for (let i = lines.length - 1; i >= 0; i--) {
-                    const sceneMatch = lines[i].match(/rcid:([\w_]+)\.ScenesPreset\.asset/i);
-                    if (sceneMatch) {
-                        const mapName = sceneMatch[1].toLowerCase();
-                        streamDeck.logger.info("Map name from scene:", mapName);
-                        latestMapName = mapName;
-
-                        // Only process the last map found - exit after first match when reading backward
-                        break;
-                    }
-                }
-
-                if (latestMapName) {
-                    // Check if map name exists in localMapNames
-                    if (localMapNames) {
-                        for (const mapEntry of localMapNames) {
-                            const localIDsLowercase = mapEntry.localIDs.map(id => id.toLowerCase());
-                            if (localIDsLowercase.includes(latestMapName)) {
-                                streamDeck.logger.info("Map location found (PVE mode):", mapEntry.dataID);
-                                return mapEntry.dataID;
-                            }
-                        }
-                        streamDeck.logger.info("No matching dataID found for map:", latestMapName);
-                    }
-                    // If we couldn't map it, just return the map name we found
-                    return latestMapName;
-                }
-            } else {
-                // Using original Location method
-                for (let i = lines.length - 1; i >= 0; i--) {
-                    const match = lines[i].match(/Location:\s(\w+),/);
-                    if (match) {
-                        streamDeck.logger.info("Map location found:", match[1]);
-                        return match[1];
-                    }
-                }
-            }
-
-            streamDeck.logger.info("No location found in latest file:", latestFile);
-            return null;
-        } catch (error) {
-            streamDeck.logger.error("Error reading logs:", error);
-            return null;
+        if (settings.eft_install_path) {
+            settingsService.setEftInstallPath(settings.eft_install_path);
         }
     }
 
-    private async getProfilePath(deviceType: number) {
-        switch (deviceType) {
-            case 0:
-                return "Map Info MK V2";
-            case 1:
-                return "Map Info Mini V2";
-            case 2:
-                return "Map Info XL V2";
-            case 3:
-                return "Map Info MK V2";
-            case 7:
-                return "Map Info Neo V2";
-            case 9:
-                return "Map Info Neo V2";
-            default:
-                return '';
-        }
+    override async onSendToPlugin(ev: SendToPluginEvent<JsonValue, JsonObject>): Promise<void> {
+        const handled = await handleCommonCommands(ev);
+        if (handled) return;
     }
 
-    override onDidReceiveSettings(ev: DidReceiveSettingsEvent): void | Promise<void> {
-        const { pve_map_mode_check, eft_install_path, map_autoupdate_check } = ev.payload.settings;
-        globalThis.pve_map_mode_check = pve_map_mode_check;
-        globalThis.eftInstallPath = eft_install_path;
-        globalThis.map_autoupdate_check = map_autoupdate_check;
-
-        streamDeck.logger.info("Received settings:", ev.payload.settings);
-
-        const updatedData = {
-            global: {
-                eft_install_path,
-            },
-            current_map_info: {
-                pve_map_mode_check,
-                map_autoupdate_check,
-            },
-        };
-
-        saveSettings(updatedData);
+    override onWillDisappear(ev: WillDisappearEvent): void | Promise<void> {
+        this.stopAutoUpdate(ev.action.id);
     }
 
-    override async onSendToPlugin(ev: SendToPluginEvent<any, any>): Promise<void> {
-        const payload = ev.payload as any;
-        streamDeck.logger.info("onSendToPlugin received:", JSON.stringify(payload));
+    private stopAutoUpdate(actionId: string): void {
+        const t = this.autoUpdateTimers.get(actionId);
+        if (t) {
+            clearInterval(t);
+            this.autoUpdateTimers.delete(actionId);
+        }
+        this.bumpGen(actionId);
+    }
 
-        if (ev.payload === 'openPatreon') {
-            streamDeck.system.openUrl('https://patreon.com/tarkovboteu');
+    private bumpGen(actionId: string): number {
+        const gen = (this.generations.get(actionId) ?? 0) + 1;
+        this.generations.set(actionId, gen);
+        return gen;
+    }
+
+    private async maybeInheritFromGlobal(
+        action: any,
+        settings: MapInfoSettings,
+    ): Promise<MapInfoSettings> {
+        if (isValidGameMode(settings.game_mode)) return settings;
+
+        const global = settingsService.load();
+        const inherited: MapInfoSettings = { ...settings };
+        let changed = false;
+
+        if (global.game_mode) {
+            inherited.game_mode = global.game_mode;
+            changed = true;
+        }
+        if (!settings.eft_install_path && global.eftInstallPath) {
+            inherited.eft_install_path = global.eftInstallPath;
+            changed = true;
+        }
+        if (settings.map_autoupdate_check === undefined) {
+            inherited.map_autoupdate_check = global.map_autoupdate_check;
+            changed = true;
         }
 
-        if (payload.command === "autoDetectPath") {
-            streamDeck.logger.info("Starting auto-detect path...");
-            const result = await detectEftPath();
-            streamDeck.logger.info("Auto-detect result:", JSON.stringify(result));
-
-            if (result.success && result.path) {
-                // Update the action settings with the detected path
-                await ev.action.setSettings({
-                    ...await ev.action.getSettings(),
-                    eft_install_path: result.path
-                });
-
-                // Save to global settings
-                saveSettings({
-                    global: { eft_install_path: result.path }
-                });
-
-                // Send success response back to property inspector
-                await streamDeck.ui.current?.sendToPropertyInspector({
-                    event: "autoDetectResult",
-                    success: true,
-                    path: result.path
-                });
-            } else {
-                // Send error response
-                await streamDeck.ui.current?.sendToPropertyInspector({
-                    event: "autoDetectResult",
-                    success: false,
-                    error: result.error
-                });
-            }
-        } else if (payload.command === "getGlobalSettings") {
-            const settings = loadSettings();
-            streamDeck.logger.info("Sending global settings:", settings.eftInstallPath);
-            await streamDeck.ui.current?.sendToPropertyInspector({
-                event: "globalSettings",
-                eft_install_path: settings.eftInstallPath
-            });
+        if (changed) {
+            await action.setSettings(inherited as unknown as JsonObject);
+            settingsService.invalidateCache();
+            return inherited;
         }
+        return settings;
     }
 }

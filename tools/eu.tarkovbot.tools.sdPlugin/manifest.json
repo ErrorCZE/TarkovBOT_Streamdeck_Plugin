@@ -1,584 +1,584 @@
 {
-	"Name": "Escape from Tarkov Tools",
-	"Version": "1.4.1.2",
-	"Author": "TarkovBOT.eu",
-	"Category": "Escape from Tarkov Tools",
-	"CategoryIcon": "assets/categoryicon",
-	"Icon": "assets/categoryicon",
-	"CodePath": "bin/plugin.js",
-	"Description": "Tools designed for Escape from Tarkov streamers and regular players. For example Goons Tracker, Trader Restocks and more.",
-	"SDKVersion": 3,
-	"Software": {
-		"MinimumVersion": "6.9"
-	},
-	"Actions": [
-		{
-			"Name": "GoonsTracker - Latest Report",
-			"UUID": "eu.tarkovbot.tools.goonsgetlocation",
-			"Icon": "assets/actionicon_goons",
-			"Tooltip": "Simply move this action to any button and then press it to retrieve the latest reported location.\nRemember to set up your access token obtained from our website dashboard for this feature to work.",
-			"PropertyInspectorPath": "property-inspector/inspector_goons.html",
-			"Controllers": [
-				"Keypad"
-			],
-			"States": [
-				{
-					"Image": "assets/empty_image",
-					"TitleAlignment": "middle",
-					"FontSize": 9
-				}
-			],
-			"Encoder": {
-				"layout": "$B1"
-			},
-			"UserTitleEnabled": false
-		},
-		{
-			"Name": "Tarkov Time",
-			"UUID": "eu.tarkovbot.tools.tarkovtime",
-			"Icon": "assets/actionicon_time",
-			"Tooltip": "Simply move this action to any button and wait for the time to show.",
-			"Controllers": [
-				"Keypad"
-			],
-			"States": [
-				{
-					"Image": "assets/empty_image",
-					"TitleAlignment": "middle",
-					"FontSize": 13
-				}
-			],
-			"Encoder": {
-				"layout": "$B1"
-			},
-			"UserTitleEnabled": false
-		},
-		{
-			"Name": "Trader Restock Timer",
-			"UUID": "eu.tarkovbot.tools.traderrestock",
-			"Icon": "assets/actionicon_restock",
-			"Tooltip": "Simply move this action to any button and wait for the time to show.",
-			"PropertyInspectorPath": "property-inspector/inspector_traderrestock.html",
-			"Controllers": [
-				"Keypad"
-			],
-			"States": [
-				{
-					"Image": "assets/empty_image",
-					"TitleAlignment": "middle",
-					"FontSize": 11
-				}
-			],
-			"Encoder": {
-				"layout": "$B1"
-			},
-			"UserTitleEnabled": false
-		},
-		{
-			"Name": "Current Map Info",
-			"UUID": "eu.tarkovbot.tools.mapinfo",
-			"Icon": "assets/actionicon_mapinfo",
-			"Tooltip": "Displays current map information.",
-			"PropertyInspectorPath": "property-inspector/inspector_mapinfo.html",
-			"Controllers": [
-				"Keypad"
-			],
-			"States": [
-				{
-					"Image": "assets/empty_image",
-					"TitleAlignment": "middle",
-					"FontSize": 9
-				}
-			],
-			"UserTitleEnabled": false
-		},
-		{
-			"Name": "Map Info - Name",
-			"UUID": "eu.tarkovbot.tools.mapinfo.name",
-			"Icon": "assets/empty_image",
-			"Controllers": [
-				"Keypad"
-			],
-			"States": [
-				{
-					"Image": "assets/mapinfo_mapname",
-					"TitleAlignment": "middle",
-					"FontSize": 9
-				}
-			],
-			"UserTitleEnabled": false,
-			"VisibleInActionsList": false,
-			"SupportedInMultiActions": false
-		},
-		{
-			"Name": "Map Info - Raid Duration",
-			"UUID": "eu.tarkovbot.tools.mapinfo.raidduration",
-			"Icon": "assets/empty_image",
-			"Controllers": [
-				"Keypad"
-			],
-			"States": [
-				{
-					"Image": "assets/mapinfo_mapduration",
-					"TitleAlignment": "middle",
-					"FontSize": 9
-				}
-			],
-			"UserTitleEnabled": false,
-			"VisibleInActionsList": false,
-			"SupportedInMultiActions": false
-		},
-		{
-			"Name": "Map Info - Player Count",
-			"UUID": "eu.tarkovbot.tools.mapinfo.playercount",
-			"Icon": "assets/empty_image",
-			"Controllers": [
-				"Keypad"
-			],
-			"States": [
-				{
-					"Image": "assets/mapinfo_playercount",
-					"TitleAlignment": "middle",
-					"FontSize": 9
-				}
-			],
-			"UserTitleEnabled": false,
-			"VisibleInActionsList": false,
-			"SupportedInMultiActions": false
-		},
-		{
-			"Name": "Current Raid Server",
-			"UUID": "eu.tarkovbot.tools.raidserver",
-			"Icon": "assets/actionicon_raidserver",
-			"Tooltip": "Simply move this action to any button and wait for the region to show.",
-			"PropertyInspectorPath": "property-inspector/inspector_raidserver.html",
-			"Controllers": [
-				"Keypad"
-			],
-			"States": [
-				{
-					"Image": "assets/empty_image",
-					"TitleAlignment": "middle",
-					"FontSize": 9
-				}
-			],
-			"Encoder": {
-				"layout": "$B1"
-			},
-			"UserTitleEnabled": false
-		},
-		{
-			"Name": "Map Info - Current Server",
-			"UUID": "eu.tarkovbot.tools.mapinfo.currentserver",
-			"Icon": "assets/empty_image",
-			"Controllers": [
-				"Keypad"
-			],
-			"States": [
-				{
-					"Image": "assets/mapinfo_currentserver",
-					"TitleAlignment": "top",
-					"FontSize": 9
-				}
-			],
-			"UserTitleEnabled": false,
-			"VisibleInActionsList": false,
-			"SupportedInMultiActions": false
-		},
-		{
-			"Name": "Map Info - Boss Info [0]",
-			"UUID": "eu.tarkovbot.tools.mapinfo.bossinfo0",
-			"Icon": "assets/empty_image",
-			"Controllers": [
-				"Keypad"
-			],
-			"States": [
-				{
-					"Image": "assets/empty_image",
-					"TitleAlignment": "top",
-					"FontSize": 10
-				}
-			],
-			"UserTitleEnabled": false,
-			"VisibleInActionsList": false,
-			"SupportedInMultiActions": false
-		},
-		{
-			"Name": "Map Info - Boss Info [1]",
-			"UUID": "eu.tarkovbot.tools.mapinfo.bossinfo1",
-			"Icon": "assets/empty_image",
-			"Controllers": [
-				"Keypad"
-			],
-			"States": [
-				{
-					"Image": "assets/empty_image",
-					"TitleAlignment": "top",
-					"FontSize": 10
-				}
-			],
-			"UserTitleEnabled": false,
-			"VisibleInActionsList": false,
-			"SupportedInMultiActions": false
-		},
-		{
-			"Name": "Map Info - Boss Info [2]",
-			"UUID": "eu.tarkovbot.tools.mapinfo.bossinfo2",
-			"Icon": "assets/empty_image",
-			"Controllers": [
-				"Keypad"
-			],
-			"States": [
-				{
-					"Image": "assets/empty_image",
-					"TitleAlignment": "top",
-					"FontSize": 10
-				}
-			],
-			"UserTitleEnabled": false,
-			"VisibleInActionsList": false,
-			"SupportedInMultiActions": false
-		},
-		{
-			"Name": "Map Info - Boss Info [3]",
-			"UUID": "eu.tarkovbot.tools.mapinfo.bossinfo3",
-			"Icon": "assets/empty_image",
-			"Controllers": [
-				"Keypad"
-			],
-			"States": [
-				{
-					"Image": "assets/empty_image",
-					"TitleAlignment": "top",
-					"FontSize": 10
-				}
-			],
-			"UserTitleEnabled": false,
-			"VisibleInActionsList": false,
-			"SupportedInMultiActions": false
-		},
-		{
-			"Name": "Map Info - Boss Info [4]",
-			"UUID": "eu.tarkovbot.tools.mapinfo.bossinfo4",
-			"Icon": "assets/empty_image",
-			"Controllers": [
-				"Keypad"
-			],
-			"States": [
-				{
-					"Image": "assets/empty_image",
-					"TitleAlignment": "top",
-					"FontSize": 10
-				}
-			],
-			"UserTitleEnabled": false,
-			"VisibleInActionsList": false,
-			"SupportedInMultiActions": false
-		},
-		{
-			"Name": "Map Info - Boss Info [5]",
-			"UUID": "eu.tarkovbot.tools.mapinfo.bossinfo5",
-			"Icon": "assets/empty_image",
-			"Controllers": [
-				"Keypad"
-			],
-			"States": [
-				{
-					"Image": "assets/empty_image",
-					"TitleAlignment": "top",
-					"FontSize": 10
-				}
-			],
-			"UserTitleEnabled": false,
-			"VisibleInActionsList": false,
-			"SupportedInMultiActions": false
-		},
-		{
-			"Name": "Map Info - Boss Info [6]",
-			"UUID": "eu.tarkovbot.tools.mapinfo.bossinfo6",
-			"Icon": "assets/empty_image",
-			"Controllers": [
-				"Keypad"
-			],
-			"States": [
-				{
-					"Image": "assets/empty_image",
-					"TitleAlignment": "top",
-					"FontSize": 10
-				}
-			],
-			"UserTitleEnabled": false,
-			"VisibleInActionsList": false,
-			"SupportedInMultiActions": false
-		},
-		{
-			"Name": "Map Info - Boss Info [7]",
-			"UUID": "eu.tarkovbot.tools.mapinfo.bossinfo7",
-			"Icon": "assets/empty_image",
-			"Controllers": [
-				"Keypad"
-			],
-			"States": [
-				{
-					"Image": "assets/empty_image",
-					"TitleAlignment": "top",
-					"FontSize": 10
-				}
-			],
-			"UserTitleEnabled": false,
-			"VisibleInActionsList": false,
-			"SupportedInMultiActions": false
-		},
-		{
-			"Name": "Map Info - Boss Info [8]",
-			"UUID": "eu.tarkovbot.tools.mapinfo.bossinfo8",
-			"Icon": "assets/empty_image",
-			"Controllers": [
-				"Keypad"
-			],
-			"States": [
-				{
-					"Image": "assets/empty_image",
-					"TitleAlignment": "top",
-					"FontSize": 10
-				}
-			],
-			"UserTitleEnabled": false,
-			"VisibleInActionsList": false,
-			"SupportedInMultiActions": false
-		},
-		{
-			"Name": "Map Info - Boss Info [9]",
-			"UUID": "eu.tarkovbot.tools.mapinfo.bossinfo9",
-			"Icon": "assets/empty_image",
-			"Controllers": [
-				"Keypad"
-			],
-			"States": [
-				{
-					"Image": "assets/empty_image",
-					"TitleAlignment": "top",
-					"FontSize": 10
-				}
-			],
-			"UserTitleEnabled": false,
-			"VisibleInActionsList": false,
-			"SupportedInMultiActions": false
-		},
-		{
-			"Name": "Map Info - Boss Info [10]",
-			"UUID": "eu.tarkovbot.tools.mapinfo.bossinfo10",
-			"Icon": "assets/empty_image",
-			"Controllers": [
-				"Keypad"
-			],
-			"States": [
-				{
-					"Image": "assets/empty_image",
-					"TitleAlignment": "top",
-					"FontSize": 10
-				}
-			],
-			"UserTitleEnabled": false,
-			"VisibleInActionsList": false,
-			"SupportedInMultiActions": false
-		},
-		{
-			"Name": "Map Info - Boss Info [11]",
-			"UUID": "eu.tarkovbot.tools.mapinfo.bossinfo11",
-			"Icon": "assets/empty_image",
-			"Controllers": [
-				"Keypad"
-			],
-			"States": [
-				{
-					"Image": "assets/empty_image",
-					"TitleAlignment": "top",
-					"FontSize": 10
-				}
-			],
-			"UserTitleEnabled": false,
-			"VisibleInActionsList": false,
-			"SupportedInMultiActions": false
-		},
-		{
-			"Name": "Map Info - Boss Info [12]",
-			"UUID": "eu.tarkovbot.tools.mapinfo.bossinfo12",
-			"Icon": "assets/empty_image",
-			"Controllers": [
-				"Keypad"
-			],
-			"States": [
-				{
-					"Image": "assets/empty_image",
-					"TitleAlignment": "top",
-					"FontSize": 10
-				}
-			],
-			"UserTitleEnabled": false,
-			"VisibleInActionsList": false,
-			"SupportedInMultiActions": false
-		},
-		{
-			"Name": "Map Info - Boss Info [13]",
-			"UUID": "eu.tarkovbot.tools.mapinfo.bossinfo13",
-			"Icon": "assets/empty_image",
-			"Controllers": [
-				"Keypad"
-			],
-			"States": [
-				{
-					"Image": "assets/empty_image",
-					"TitleAlignment": "top",
-					"FontSize": 10
-				}
-			],
-			"UserTitleEnabled": false,
-			"VisibleInActionsList": false,
-			"SupportedInMultiActions": false
-		},
-		{
-			"Name": "Map Info - Boss Info [14]",
-			"UUID": "eu.tarkovbot.tools.mapinfo.bossinfo14",
-			"Icon": "assets/empty_image",
-			"Controllers": [
-				"Keypad"
-			],
-			"States": [
-				{
-					"Image": "assets/empty_image",
-					"TitleAlignment": "top",
-					"FontSize": 10
-				}
-			],
-			"UserTitleEnabled": false,
-			"VisibleInActionsList": false,
-			"SupportedInMultiActions": false
-		},
-		{
-			"Name": "Map Info - Boss Info [15]",
-			"UUID": "eu.tarkovbot.tools.mapinfo.bossinfo15",
-			"Icon": "assets/empty_image",
-			"Controllers": [
-				"Keypad"
-			],
-			"States": [
-				{
-					"Image": "assets/empty_image",
-					"TitleAlignment": "top",
-					"FontSize": 10
-				}
-			],
-			"UserTitleEnabled": false,
-			"VisibleInActionsList": false,
-			"SupportedInMultiActions": false
-		},
-		{
-			"Name": "Map Info - Main Profile Btn",
-			"UUID": "eu.tarkovbot.tools.mapinfo.mainprofile",
-			"Icon": "assets/empty_image",
-			"Controllers": [
-				"Keypad"
-			],
-			"States": [
-				{
-					"Image": "assets/empty_image",
-					"TitleAlignment": "middle",
-					"FontSize": 13
-				}
-			],
-			"UserTitleEnabled": false,
-			"VisibleInActionsList": false,
-			"SupportedInMultiActions": false
-		},
-		{
-			"Name": "Map Info - Next Page Btn",
-			"UUID": "eu.tarkovbot.tools.mapinfo.nextpage",
-			"Icon": "assets/empty_image",
-			"Controllers": [
-				"Keypad"
-			],
-			"States": [
-				{
-					"Image": "assets/empty_image",
-					"TitleAlignment": "middle",
-					"FontSize": 13
-				}
-			],
-			"UserTitleEnabled": false,
-			"VisibleInActionsList": false,
-			"SupportedInMultiActions": false
-		},
-		{
-			"Name": "Map Info - Previous Page Btn",
-			"UUID": "eu.tarkovbot.tools.mapinfo.previouspage",
-			"Icon": "assets/empty_image",
-			"Controllers": [
-				"Keypad"
-			],
-			"States": [
-				{
-					"Image": "assets/empty_image",
-					"TitleAlignment": "middle",
-					"FontSize": 13
-				}
-			],
-			"UserTitleEnabled": false,
-			"VisibleInActionsList": false,
-			"SupportedInMultiActions": false
-		}
-	],
-	"Profiles": [
-		{
-			"Name": "Map Info MK V2",
-			"DeviceType": 0,
-			"Readonly": true,
-			"DontAutoSwitchWhenInstalled": true
-		},
-		{
-			"Name": "Map Info Mini V2",
-			"DeviceType": 1,
-			"Readonly": true,
-			"DontAutoSwitchWhenInstalled": true
-		},
-		{
-			"Name": "Map Info XL V2",
-			"DeviceType": 2,
-			"Readonly": true,
-			"DontAutoSwitchWhenInstalled": true
-		},
-		{
-			"Name": "Map Info MK V2",
-			"DeviceType": 3,
-			"Readonly": true,
-			"DontAutoSwitchWhenInstalled": true
-		},
-		{
-			"Name": "Map Info Neo V2",
-			"DeviceType": 7,
-			"Readonly": true,
-			"DontAutoSwitchWhenInstalled": true
-		},
-		{
-			"Name": "Map Info Neo V2",
-			"DeviceType": 9,
-			"Readonly": true,
-			"DontAutoSwitchWhenInstalled": true
-		}
-	],
-	"OS": [
-		{
-			"Platform": "mac",
-			"MinimumVersion": "10.15"
-		},
-		{
-			"Platform": "windows",
-			"MinimumVersion": "10"
-		}
-	],
-	"Nodejs": {
-		"Version": "20",
-		"Debug": "enabled"
-	},
-	"UUID": "eu.tarkovbot.tools"
+        "Name": "Escape from Tarkov Tools",
+        "Version": "1.5.0.0",
+        "Author": "TarkovBOT.eu",
+        "Category": "Escape from Tarkov Tools",
+        "CategoryIcon": "assets/categoryicon",
+        "Icon": "assets/categoryicon",
+        "CodePath": "bin/plugin.js",
+        "Description": "Tools designed for Escape from Tarkov streamers and regular players. For example Goons Tracker, Trader Restocks and more.",
+        "SDKVersion": 3,
+        "Software": {
+                "MinimumVersion": "6.9"
+        },
+        "Actions": [
+                {
+                        "Name": "GoonsTracker - Latest Report",
+                        "UUID": "eu.tarkovbot.tools.goonsgetlocation",
+                        "Icon": "assets/actionicon_goons",
+                        "Tooltip": "Simply move this action to any button and then press it to retrieve the latest reported location.\nRemember to set up your access token obtained from our website dashboard for this feature to work.",
+                        "PropertyInspectorPath": "property-inspector/inspector_goons.html",
+                        "Controllers": [
+                                "Keypad"
+                        ],
+                        "States": [
+                                {
+                                        "Image": "assets/empty_image",
+                                        "TitleAlignment": "middle",
+                                        "FontSize": 11
+                                }
+                        ],
+                        "Encoder": {
+                                "layout": "$B1"
+                        },
+                        "UserTitleEnabled": false
+                },
+                {
+                        "Name": "Tarkov Time",
+                        "UUID": "eu.tarkovbot.tools.tarkovtime",
+                        "Icon": "assets/actionicon_time",
+                        "Tooltip": "Simply move this action to any button and wait for the time to show.",
+                        "Controllers": [
+                                "Keypad"
+                        ],
+                        "States": [
+                                {
+                                        "Image": "assets/empty_image",
+                                        "TitleAlignment": "middle",
+                                        "FontSize": 17
+                                }
+                        ],
+                        "Encoder": {
+                                "layout": "$B1"
+                        },
+                        "UserTitleEnabled": false
+                },
+                {
+                        "Name": "Trader Restock Timer",
+                        "UUID": "eu.tarkovbot.tools.traderrestock",
+                        "Icon": "assets/actionicon_restock",
+                        "Tooltip": "Simply move this action to any button and wait for the time to show.",
+                        "PropertyInspectorPath": "property-inspector/inspector_traderrestock.html",
+                        "Controllers": [
+                                "Keypad"
+                        ],
+                        "States": [
+                                {
+                                        "Image": "assets/empty_image",
+                                        "TitleAlignment": "middle",
+                                        "FontSize": 14
+                                }
+                        ],
+                        "Encoder": {
+                                "layout": "$B1"
+                        },
+                        "UserTitleEnabled": false
+                },
+                {
+                        "Name": "Current Map Info",
+                        "UUID": "eu.tarkovbot.tools.mapinfo",
+                        "Icon": "assets/actionicon_mapinfo",
+                        "Tooltip": "Displays current map information.",
+                        "PropertyInspectorPath": "property-inspector/inspector_mapinfo.html",
+                        "Controllers": [
+                                "Keypad"
+                        ],
+                        "States": [
+                                {
+                                        "Image": "assets/empty_image",
+                                        "TitleAlignment": "middle",
+                                        "FontSize": 12
+                                }
+                        ],
+                        "UserTitleEnabled": false
+                },
+                {
+                        "Name": "Map Info - Name",
+                        "UUID": "eu.tarkovbot.tools.mapinfo.name",
+                        "Icon": "assets/empty_image",
+                        "Controllers": [
+                                "Keypad"
+                        ],
+                        "States": [
+                                {
+                                        "Image": "assets/mapinfo_mapname",
+                                        "TitleAlignment": "middle",
+                                        "FontSize": 9
+                                }
+                        ],
+                        "UserTitleEnabled": false,
+                        "VisibleInActionsList": false,
+                        "SupportedInMultiActions": false
+                },
+                {
+                        "Name": "Map Info - Raid Duration",
+                        "UUID": "eu.tarkovbot.tools.mapinfo.raidduration",
+                        "Icon": "assets/empty_image",
+                        "Controllers": [
+                                "Keypad"
+                        ],
+                        "States": [
+                                {
+                                        "Image": "assets/mapinfo_mapduration",
+                                        "TitleAlignment": "middle",
+                                        "FontSize": 9
+                                }
+                        ],
+                        "UserTitleEnabled": false,
+                        "VisibleInActionsList": false,
+                        "SupportedInMultiActions": false
+                },
+                {
+                        "Name": "Map Info - Player Count",
+                        "UUID": "eu.tarkovbot.tools.mapinfo.playercount",
+                        "Icon": "assets/empty_image",
+                        "Controllers": [
+                                "Keypad"
+                        ],
+                        "States": [
+                                {
+                                        "Image": "assets/mapinfo_playercount",
+                                        "TitleAlignment": "middle",
+                                        "FontSize": 9
+                                }
+                        ],
+                        "UserTitleEnabled": false,
+                        "VisibleInActionsList": false,
+                        "SupportedInMultiActions": false
+                },
+                {
+                        "Name": "Current Raid Server",
+                        "UUID": "eu.tarkovbot.tools.raidserver",
+                        "Icon": "assets/actionicon_raidserver",
+                        "Tooltip": "Simply move this action to any button and wait for the region to show.",
+                        "PropertyInspectorPath": "property-inspector/inspector_raidserver.html",
+                        "Controllers": [
+                                "Keypad"
+                        ],
+                        "States": [
+                                {
+                                        "Image": "assets/empty_image",
+                                        "TitleAlignment": "middle",
+                                        "FontSize": 9
+                                }
+                        ],
+                        "Encoder": {
+                                "layout": "$B1"
+                        },
+                        "UserTitleEnabled": false
+                },
+                {
+                        "Name": "Map Info - Current Server",
+                        "UUID": "eu.tarkovbot.tools.mapinfo.currentserver",
+                        "Icon": "assets/empty_image",
+                        "Controllers": [
+                                "Keypad"
+                        ],
+                        "States": [
+                                {
+                                        "Image": "assets/mapinfo_currentserver",
+                                        "TitleAlignment": "top",
+                                        "FontSize": 9
+                                }
+                        ],
+                        "UserTitleEnabled": false,
+                        "VisibleInActionsList": false,
+                        "SupportedInMultiActions": false
+                },
+                {
+                        "Name": "Map Info - Boss Info [0]",
+                        "UUID": "eu.tarkovbot.tools.mapinfo.bossinfo0",
+                        "Icon": "assets/empty_image",
+                        "Controllers": [
+                                "Keypad"
+                        ],
+                        "States": [
+                                {
+                                        "Image": "assets/empty_image",
+                                        "TitleAlignment": "top",
+                                        "FontSize": 10
+                                }
+                        ],
+                        "UserTitleEnabled": false,
+                        "VisibleInActionsList": false,
+                        "SupportedInMultiActions": false
+                },
+                {
+                        "Name": "Map Info - Boss Info [1]",
+                        "UUID": "eu.tarkovbot.tools.mapinfo.bossinfo1",
+                        "Icon": "assets/empty_image",
+                        "Controllers": [
+                                "Keypad"
+                        ],
+                        "States": [
+                                {
+                                        "Image": "assets/empty_image",
+                                        "TitleAlignment": "top",
+                                        "FontSize": 10
+                                }
+                        ],
+                        "UserTitleEnabled": false,
+                        "VisibleInActionsList": false,
+                        "SupportedInMultiActions": false
+                },
+                {
+                        "Name": "Map Info - Boss Info [2]",
+                        "UUID": "eu.tarkovbot.tools.mapinfo.bossinfo2",
+                        "Icon": "assets/empty_image",
+                        "Controllers": [
+                                "Keypad"
+                        ],
+                        "States": [
+                                {
+                                        "Image": "assets/empty_image",
+                                        "TitleAlignment": "top",
+                                        "FontSize": 10
+                                }
+                        ],
+                        "UserTitleEnabled": false,
+                        "VisibleInActionsList": false,
+                        "SupportedInMultiActions": false
+                },
+                {
+                        "Name": "Map Info - Boss Info [3]",
+                        "UUID": "eu.tarkovbot.tools.mapinfo.bossinfo3",
+                        "Icon": "assets/empty_image",
+                        "Controllers": [
+                                "Keypad"
+                        ],
+                        "States": [
+                                {
+                                        "Image": "assets/empty_image",
+                                        "TitleAlignment": "top",
+                                        "FontSize": 10
+                                }
+                        ],
+                        "UserTitleEnabled": false,
+                        "VisibleInActionsList": false,
+                        "SupportedInMultiActions": false
+                },
+                {
+                        "Name": "Map Info - Boss Info [4]",
+                        "UUID": "eu.tarkovbot.tools.mapinfo.bossinfo4",
+                        "Icon": "assets/empty_image",
+                        "Controllers": [
+                                "Keypad"
+                        ],
+                        "States": [
+                                {
+                                        "Image": "assets/empty_image",
+                                        "TitleAlignment": "top",
+                                        "FontSize": 10
+                                }
+                        ],
+                        "UserTitleEnabled": false,
+                        "VisibleInActionsList": false,
+                        "SupportedInMultiActions": false
+                },
+                {
+                        "Name": "Map Info - Boss Info [5]",
+                        "UUID": "eu.tarkovbot.tools.mapinfo.bossinfo5",
+                        "Icon": "assets/empty_image",
+                        "Controllers": [
+                                "Keypad"
+                        ],
+                        "States": [
+                                {
+                                        "Image": "assets/empty_image",
+                                        "TitleAlignment": "top",
+                                        "FontSize": 10
+                                }
+                        ],
+                        "UserTitleEnabled": false,
+                        "VisibleInActionsList": false,
+                        "SupportedInMultiActions": false
+                },
+                {
+                        "Name": "Map Info - Boss Info [6]",
+                        "UUID": "eu.tarkovbot.tools.mapinfo.bossinfo6",
+                        "Icon": "assets/empty_image",
+                        "Controllers": [
+                                "Keypad"
+                        ],
+                        "States": [
+                                {
+                                        "Image": "assets/empty_image",
+                                        "TitleAlignment": "top",
+                                        "FontSize": 10
+                                }
+                        ],
+                        "UserTitleEnabled": false,
+                        "VisibleInActionsList": false,
+                        "SupportedInMultiActions": false
+                },
+                {
+                        "Name": "Map Info - Boss Info [7]",
+                        "UUID": "eu.tarkovbot.tools.mapinfo.bossinfo7",
+                        "Icon": "assets/empty_image",
+                        "Controllers": [
+                                "Keypad"
+                        ],
+                        "States": [
+                                {
+                                        "Image": "assets/empty_image",
+                                        "TitleAlignment": "top",
+                                        "FontSize": 10
+                                }
+                        ],
+                        "UserTitleEnabled": false,
+                        "VisibleInActionsList": false,
+                        "SupportedInMultiActions": false
+                },
+                {
+                        "Name": "Map Info - Boss Info [8]",
+                        "UUID": "eu.tarkovbot.tools.mapinfo.bossinfo8",
+                        "Icon": "assets/empty_image",
+                        "Controllers": [
+                                "Keypad"
+                        ],
+                        "States": [
+                                {
+                                        "Image": "assets/empty_image",
+                                        "TitleAlignment": "top",
+                                        "FontSize": 10
+                                }
+                        ],
+                        "UserTitleEnabled": false,
+                        "VisibleInActionsList": false,
+                        "SupportedInMultiActions": false
+                },
+                {
+                        "Name": "Map Info - Boss Info [9]",
+                        "UUID": "eu.tarkovbot.tools.mapinfo.bossinfo9",
+                        "Icon": "assets/empty_image",
+                        "Controllers": [
+                                "Keypad"
+                        ],
+                        "States": [
+                                {
+                                        "Image": "assets/empty_image",
+                                        "TitleAlignment": "top",
+                                        "FontSize": 10
+                                }
+                        ],
+                        "UserTitleEnabled": false,
+                        "VisibleInActionsList": false,
+                        "SupportedInMultiActions": false
+                },
+                {
+                        "Name": "Map Info - Boss Info [10]",
+                        "UUID": "eu.tarkovbot.tools.mapinfo.bossinfo10",
+                        "Icon": "assets/empty_image",
+                        "Controllers": [
+                                "Keypad"
+                        ],
+                        "States": [
+                                {
+                                        "Image": "assets/empty_image",
+                                        "TitleAlignment": "top",
+                                        "FontSize": 10
+                                }
+                        ],
+                        "UserTitleEnabled": false,
+                        "VisibleInActionsList": false,
+                        "SupportedInMultiActions": false
+                },
+                {
+                        "Name": "Map Info - Boss Info [11]",
+                        "UUID": "eu.tarkovbot.tools.mapinfo.bossinfo11",
+                        "Icon": "assets/empty_image",
+                        "Controllers": [
+                                "Keypad"
+                        ],
+                        "States": [
+                                {
+                                        "Image": "assets/empty_image",
+                                        "TitleAlignment": "top",
+                                        "FontSize": 10
+                                }
+                        ],
+                        "UserTitleEnabled": false,
+                        "VisibleInActionsList": false,
+                        "SupportedInMultiActions": false
+                },
+                {
+                        "Name": "Map Info - Boss Info [12]",
+                        "UUID": "eu.tarkovbot.tools.mapinfo.bossinfo12",
+                        "Icon": "assets/empty_image",
+                        "Controllers": [
+                                "Keypad"
+                        ],
+                        "States": [
+                                {
+                                        "Image": "assets/empty_image",
+                                        "TitleAlignment": "top",
+                                        "FontSize": 10
+                                }
+                        ],
+                        "UserTitleEnabled": false,
+                        "VisibleInActionsList": false,
+                        "SupportedInMultiActions": false
+                },
+                {
+                        "Name": "Map Info - Boss Info [13]",
+                        "UUID": "eu.tarkovbot.tools.mapinfo.bossinfo13",
+                        "Icon": "assets/empty_image",
+                        "Controllers": [
+                                "Keypad"
+                        ],
+                        "States": [
+                                {
+                                        "Image": "assets/empty_image",
+                                        "TitleAlignment": "top",
+                                        "FontSize": 10
+                                }
+                        ],
+                        "UserTitleEnabled": false,
+                        "VisibleInActionsList": false,
+                        "SupportedInMultiActions": false
+                },
+                {
+                        "Name": "Map Info - Boss Info [14]",
+                        "UUID": "eu.tarkovbot.tools.mapinfo.bossinfo14",
+                        "Icon": "assets/empty_image",
+                        "Controllers": [
+                                "Keypad"
+                        ],
+                        "States": [
+                                {
+                                        "Image": "assets/empty_image",
+                                        "TitleAlignment": "top",
+                                        "FontSize": 10
+                                }
+                        ],
+                        "UserTitleEnabled": false,
+                        "VisibleInActionsList": false,
+                        "SupportedInMultiActions": false
+                },
+                {
+                        "Name": "Map Info - Boss Info [15]",
+                        "UUID": "eu.tarkovbot.tools.mapinfo.bossinfo15",
+                        "Icon": "assets/empty_image",
+                        "Controllers": [
+                                "Keypad"
+                        ],
+                        "States": [
+                                {
+                                        "Image": "assets/empty_image",
+                                        "TitleAlignment": "top",
+                                        "FontSize": 10
+                                }
+                        ],
+                        "UserTitleEnabled": false,
+                        "VisibleInActionsList": false,
+                        "SupportedInMultiActions": false
+                },
+                {
+                        "Name": "Map Info - Main Profile Btn",
+                        "UUID": "eu.tarkovbot.tools.mapinfo.mainprofile",
+                        "Icon": "assets/empty_image",
+                        "Controllers": [
+                                "Keypad"
+                        ],
+                        "States": [
+                                {
+                                        "Image": "assets/empty_image",
+                                        "TitleAlignment": "middle",
+                                        "FontSize": 13
+                                }
+                        ],
+                        "UserTitleEnabled": false,
+                        "VisibleInActionsList": false,
+                        "SupportedInMultiActions": false
+                },
+                {
+                        "Name": "Map Info - Next Page Btn",
+                        "UUID": "eu.tarkovbot.tools.mapinfo.nextpage",
+                        "Icon": "assets/empty_image",
+                        "Controllers": [
+                                "Keypad"
+                        ],
+                        "States": [
+                                {
+                                        "Image": "assets/empty_image",
+                                        "TitleAlignment": "middle",
+                                        "FontSize": 13
+                                }
+                        ],
+                        "UserTitleEnabled": false,
+                        "VisibleInActionsList": false,
+                        "SupportedInMultiActions": false
+                },
+                {
+                        "Name": "Map Info - Previous Page Btn",
+                        "UUID": "eu.tarkovbot.tools.mapinfo.previouspage",
+                        "Icon": "assets/empty_image",
+                        "Controllers": [
+                                "Keypad"
+                        ],
+                        "States": [
+                                {
+                                        "Image": "assets/empty_image",
+                                        "TitleAlignment": "middle",
+                                        "FontSize": 13
+                                }
+                        ],
+                        "UserTitleEnabled": false,
+                        "VisibleInActionsList": false,
+                        "SupportedInMultiActions": false
+                }
+        ],
+        "Profiles": [
+                {
+                        "Name": "Map Info MK V2",
+                        "DeviceType": 0,
+                        "Readonly": true,
+                        "DontAutoSwitchWhenInstalled": true
+                },
+                {
+                        "Name": "Map Info Mini V2",
+                        "DeviceType": 1,
+                        "Readonly": true,
+                        "DontAutoSwitchWhenInstalled": true
+                },
+                {
+                        "Name": "Map Info XL V2",
+                        "DeviceType": 2,
+                        "Readonly": true,
+                        "DontAutoSwitchWhenInstalled": true
+                },
+                {
+                        "Name": "Map Info MK V2",
+                        "DeviceType": 3,
+                        "Readonly": true,
+                        "DontAutoSwitchWhenInstalled": true
+                },
+                {
+                        "Name": "Map Info Neo V2",
+                        "DeviceType": 7,
+                        "Readonly": true,
+                        "DontAutoSwitchWhenInstalled": true
+                },
+                {
+                        "Name": "Map Info Neo V2",
+                        "DeviceType": 9,
+                        "Readonly": true,
+                        "DontAutoSwitchWhenInstalled": true
+                }
+        ],
+        "OS": [
+                {
+                        "Platform": "mac",
+                        "MinimumVersion": "10.15"
+                },
+                {
+                        "Platform": "windows",
+                        "MinimumVersion": "10"
+                }
+        ],
+        "Nodejs": {
+                "Version": "20",
+                "Debug": "enabled"
+        },
+        "UUID": "eu.tarkovbot.tools"
 }

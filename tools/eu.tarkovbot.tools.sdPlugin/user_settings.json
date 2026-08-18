@@ -1,0 +1,12 @@
+{
+    "global": {
+        "eft_install_path": "C:\\Battlestate Games\\EFT"
+    },
+    "current_server_info": {
+        "raid_autoupdate_check": false
+    },
+    "current_map_info": {
+        "map_autoupdate_check": true,
+        "game_mode": "PVP"
+    }
+}
