@@ -1,6 +1,6 @@
 {
     "name": "tarkovbot-streamdeck-tools",
-    "version": "1.5.0",
+    "version": "1.5.0.0",
     "description": "Escape from Tarkov tools for Elgato Stream Deck — Goons tracker, trader restocks, raid server info, and live map info.",
     "license": "MIT",
     "author": "TarkovBOT.eu",
