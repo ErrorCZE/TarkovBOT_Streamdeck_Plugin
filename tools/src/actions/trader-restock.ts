@@ -7,11 +7,14 @@ import {
     WillAppearEvent,
     WillDisappearEvent,
 } from "@elgato/streamdeck";
+import path from "node:path";
+import fs from "node:fs";
 import type { JsonValue, JsonObject } from "@elgato/utils";
 import { INTERVALS, URL_PATREON } from "../config/constants";
 import { tarkovApiService } from "../services/api-service";
 import type { GameMode, TraderData, TraderRestockSettings } from "../types";
 import { formatCountdown } from "../utils/time-format";
+
 
 const LOADING_TITLE = "\n\n\nLoading";
 const NO_DATA_TITLE = "\n\n\nNo Data";
@@ -19,6 +22,12 @@ const RESTOCK_TITLE = "\n\n\nRestock";
 const SELECT_BOTH_TITLE = "Select\nTrader\n& Mode";
 const SELECT_TRADER_TITLE = "Select\nTrader";
 const SELECT_MODE_TITLE = "Select\nGame\nMode";
+
+const MODE_BORDER_COLOR: Record<GameMode, string> = {
+    PVP: "#ffae00",
+    PVE: "#00d9ff",
+    SEASON: "#00ff91",
+};
 
 function isValidGameMode(mode: unknown): mode is GameMode {
     return mode === "PVP" || mode === "PVE" || mode === "SEASON";
@@ -40,6 +49,7 @@ export class TarkovTraderRestock extends SingletonAction {
     private generations = new Map<string, number>();
 
     override async onWillAppear(ev: WillAppearEvent<TraderRestockSettings>): Promise<void> {
+        this._hiddenActions.delete(ev.action.id);
         const raw = ev.payload.settings ?? ({} as TraderRestockSettings);
         const settings = migrateLegacy(raw);
         if (settings !== raw) {
@@ -49,7 +59,7 @@ export class TarkovTraderRestock extends SingletonAction {
     }
 
     override onWillDisappear(ev: WillDisappearEvent<TraderRestockSettings>): void | Promise<void> {
-        this.stopTimer(ev.action.id);
+        this._hiddenActions.add(ev.action.id);
     }
 
     override async onDidReceiveSettings(
@@ -73,7 +83,11 @@ export class TarkovTraderRestock extends SingletonAction {
         }
         if (!hasMode) {
             action.setTitle(SELECT_MODE_TITLE);
-            this.applyTraderImage(action, settings.selectedTrader);
+            try {
+                this.applyTraderImage(action, settings.selectedTrader, settings.game_mode);
+            } catch {
+                action.setImage("");
+            }
             return;
         }
         if (!hasTrader) {
@@ -82,7 +96,12 @@ export class TarkovTraderRestock extends SingletonAction {
             return;
         }
 
-        this.applyTraderImage(action, settings.selectedTrader);
+        try {
+            this.applyTraderImage(action, settings.selectedTrader, settings.game_mode);
+        } catch {
+            action.setImage("");
+        }
+
         await this.startUpdating(action, settings);
     }
 
@@ -130,7 +149,7 @@ export class TarkovTraderRestock extends SingletonAction {
         mode: GameMode,
     ): Promise<void> {
         if (!settings.selectedTrader) {
-            action.setTitle(SELECT_TRADER_TITLE);
+            if (!this._hiddenActions.has(action.id)) action.setTitle(SELECT_TRADER_TITLE);
             return;
         }
 
@@ -138,28 +157,118 @@ export class TarkovTraderRestock extends SingletonAction {
         const trader = traders.find((t) => t.name === settings.selectedTrader);
 
         if (!trader) {
-            action.setTitle(NO_DATA_TITLE);
+            if (!this._hiddenActions.has(action.id)) action.setTitle(NO_DATA_TITLE);
             return;
         }
 
-        this.renderCountdown(action, trader);
+        this.renderCountdown(action, trader, settings);
     }
 
-    private renderCountdown(action: any, trader: TraderData): void {
+    private _hiddenActions = new Set<string>();
+
+    private _lastRestockAlert = new Set<string>();
+
+    private renderCountdown(action: any, trader: TraderData, settings: TraderRestockSettings): void {
         const remaining = new Date(trader.resetTime).getTime() - Date.now();
+        const isHidden = this._hiddenActions.has(action.id);
+
         if (remaining <= 0) {
-            action.setTitle(RESTOCK_TITLE);
+            if (!isHidden) action.setTitle(RESTOCK_TITLE);
+
+            const alertKey = action.id;
+            if (!this._lastRestockAlert.has(alertKey)) {
+                this._lastRestockAlert.add(alertKey);
+                this.playRestockSound(settings);
+            }
             return;
         }
-        action.setTitle(`\n\n\n${formatCountdown(remaining)}`);
+
+        this._lastRestockAlert.delete(action.id);
+        if (!isHidden) action.setTitle(`\n\n\n${formatCountdown(remaining)}`);
     }
 
-    private applyTraderImage(action: any, traderName?: string): void {
+    private applyTraderImage(action: any, traderName: string | undefined, gameMode?: GameMode): void {
         if (!traderName) {
             action.setImage("");
             return;
         }
-        action.setImage(`assets/${traderName}.png`);
+
+        const imagePath = path.join(process.cwd(), "assets", `${traderName}.png`);
+        if (!fs.existsSync(imagePath)) {
+            action.setImage("");
+            return;
+        }
+
+        const imgBase64 = fs.readFileSync(imagePath).toString("base64");
+
+        if (!gameMode) {
+            action.setImage(`data:image/png;base64,${imgBase64}`);
+            return;
+        }
+
+        const color = MODE_BORDER_COLOR[gameMode];
+        const modeText = gameMode.toUpperCase();
+
+        const svg = `<svg xmlns="http://www.w3.org/2000/svg"
+        width="144"
+        height="144"
+        viewBox="0 0 144 144">
+
+        <image
+            href="data:image/png;base64,${imgBase64}"
+            x="0"
+            y="0"
+            width="144"
+            height="144"
+            preserveAspectRatio="none"
+        />
+
+        <rect
+            x="0"
+            y="0"
+            width="144"
+            height="23"
+            fill="${color}"
+        />
+
+        <text
+            x="72"
+            y="20"
+            text-anchor="middle"
+            dominant-baseline="middle"
+            fill="#000000"
+            font-family="Arial, sans-serif"
+            font-size="22"
+            font-weight="bold"
+        >${modeText}</text>
+
+    </svg>`;
+
+        action.setImage(
+            `data:image/svg+xml;base64,${Buffer.from(svg).toString("base64")}`
+        );
+    }
+
+    private async playRestockSound(settings: TraderRestockSettings): Promise<void> {
+        if (!settings.soundPath) return;
+        const soundFile = settings.soundPath;
+        streamDeck.logger.info(`[RESTOCK SOUND] Attempting to play: ${soundFile}`);
+
+        if (!fs.existsSync(soundFile)) {
+            streamDeck.logger.warn(`[RESTOCK SOUND] File not found: ${soundFile}`);
+            return;
+        }
+
+        try {
+            const { exec } = await import("node:child_process");
+            const escaped = soundFile.replace(/'/g, "''");
+            exec(
+                `powershell -NoProfile -Command "Add-Type -AssemblyName presentationCore; $p = New-Object System.Windows.Media.MediaPlayer; $p.Open('${escaped}'); $p.Play(); Start-Sleep -Seconds 2"`
+            );
+            streamDeck.logger.info(`[RESTOCK SOUND] Playback started`);
+        } catch (err: any) {
+            streamDeck.logger.error(`[RESTOCK SOUND] Failed: ${err.message}`);
+        }
     }
 
     override async onSendToPlugin(ev: SendToPluginEvent<JsonValue, JsonObject>): Promise<void> {

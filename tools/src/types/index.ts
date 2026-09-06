@@ -83,12 +83,17 @@ export interface RaidServerSettings extends JsonObject {
 export interface TraderRestockSettings extends JsonObject {
     selectedTrader?: string;
     game_mode?: GameMode;
+    soundPath?: string
 }
 
 export interface GoonsLocationSettings extends JsonObject {
     token?: string;
     selectedGoonsSource?: GoonsSource;
     auto_refresh?: boolean;
+}
+
+export interface RaidTimerSettings extends JsonObject {
+    eft_install_path?: string;
 }
 
 export interface UserSettings {

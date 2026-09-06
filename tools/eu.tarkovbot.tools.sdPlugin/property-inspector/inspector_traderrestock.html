@@ -30,7 +30,28 @@
     </sdpi-select>
   </sdpi-item>
 
-  <div style="padding: 8px; background: rgba(255, 255, 255, 0.05); border-radius: 4px; border-left: 3px solid lime; font-family: system-ui;">
+  <sdpi-item label="Restock Sound">
+    <sdpi-file setting="soundPath" accept=".mp3,.wav,.ogg,.oga,.flac,.m4a,.aac,.opus,.aiff,.aif,.wma">
+    </sdpi-file>
+    <sdpi-button onclick="clearSound()">Clear sound</sdpi-button>
+  </sdpi-item>
+
+  <script>
+    function clearSound() {
+      document.querySelector('sdpi-file[setting="soundPath"]').value = '';
+
+      const settings = {};
+      document.querySelectorAll('[setting]').forEach(el => {
+        settings[el.getAttribute('setting')] = el.value;
+      });
+      settings.soundPath = "";
+
+      SDPIComponents.streamDeckClient.setSettings(settings);
+    }
+  </script>
+
+  <div
+    style="padding: 8px; background: rgba(255, 255, 255, 0.05); border-radius: 4px; border-left: 3px solid lime; font-family: system-ui;">
     <div style="color: white; font-size: 12px; font-weight: bold; margin-bottom: 2px;">Game Mode:</div>
     <div style="color: #ccc; font-size: 11px; line-height: 1.4;">
       Selects which trader-restock dataset the button reads from.
@@ -39,9 +60,15 @@
 
   <hr style="border: 0; border-top: 1px solid #333; margin: 20px 10px 10px 10px;">
 
-  <div style="padding: 0 10px 10px 10px; font-family: system-ui; display: flex; flex-direction: column; align-items: center;">
-    <p style="margin: 0 0 8px 0; font-size: 10px; font-weight: 700; text-transform: uppercase; color: #888; letter-spacing: 1px;">Support the Project</p>
-    <button style="width: 100%; background: #FF424D; color: white; border: none; border-radius: 4px; padding: 8px; cursor: pointer; font-size: 12px; font-weight: bold; transition: 0.2s;" onmouseover="this.style.background='#e33b44'" onmouseout="this.style.background='#FF424D'" onclick="SDPIComponents.streamDeckClient.send('sendToPlugin', 'openPatreon');">
+  <div
+    style="padding: 0 10px 10px 10px; font-family: system-ui; display: flex; flex-direction: column; align-items: center;">
+    <p
+      style="margin: 0 0 8px 0; font-size: 10px; font-weight: 700; text-transform: uppercase; color: #888; letter-spacing: 1px;">
+      Support the Project</p>
+    <button
+      style="width: 100%; background: #FF424D; color: white; border: none; border-radius: 4px; padding: 8px; cursor: pointer; font-size: 12px; font-weight: bold; transition: 0.2s;"
+      onmouseover="this.style.background='#e33b44'" onmouseout="this.style.background='#FF424D'"
+      onclick="SDPIComponents.streamDeckClient.send('sendToPlugin', 'openPatreon');">
       Visit our Patreon
     </button>
   </div>

@@ -242,6 +242,7 @@ function freeze(value) {
         Object.values(value).forEach(freeze);
     }
 }
+
 /**
  * Gets the value at the specified {@link path}.
  * @param source Source object that is being read from.
@@ -9226,6 +9227,7 @@ const INTERVALS = {
     TRADER_DATA_REFRESH: 60_000,
     DATACENTER_REFRESH: 3_600_000,
     GOONS_AUTO_REFRESH: 300_000,
+    RAID_TIMER: 1_000,
 };
 const TARKOV_TIME_MULTIPLIER = 7;
 const TARKOV_TIME_OFFSET_MS = 12 * 60 * 60 * 1000;
@@ -9329,6 +9331,11 @@ const DEFAULT_TITLE$1 = `Get\nGoons\nLocation`;
 const SELECT_MODE_TITLE$2 = "Select\nGame\nMode";
 const ENTER_TOKEN_TITLE = "Enter\nYour\nToken";
 const SELECT_MODE_AND_TOKEN_TITLE = "Select Mode\n& Token";
+const MODE_BORDER_COLOR$1 = {
+    PVP: "#ffae00",
+    PVE: "#00d9ff",
+    SEASON: "#00ff91",
+};
 function isValidGoonsSource(source) {
     return source === "PVP" || source === "PVE" || source === "SEASON";
 }
@@ -9371,16 +9378,20 @@ let TarkovGoonsLocation = (() => {
             const hasToken = !!settings.token;
             if (!hasSource && !hasToken) {
                 action.setTitle(SELECT_MODE_AND_TOKEN_TITLE);
+                action.setImage("");
                 return;
             }
             if (!hasSource) {
                 action.setTitle(SELECT_MODE_TITLE$2);
+                action.setImage("");
                 return;
             }
             if (!hasToken) {
                 action.setTitle(ENTER_TOKEN_TITLE);
+                action.setImage("");
                 return;
             }
+            this.applyModeStrip(action, settings.selectedGoonsSource);
             action.setTitle(DEFAULT_TITLE$1);
             if (settings.auto_refresh) {
                 this.startAutoRefresh(action, settings);
@@ -9529,6 +9540,16 @@ let TarkovGoonsLocation = (() => {
                     streamDeck.system.openUrl(URL_PATREON);
                     break;
             }
+        }
+        applyModeStrip(action, source) {
+            const color = MODE_BORDER_COLOR$1[source];
+            const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="144" height="144" viewBox="0 0 144 144">
+        <rect width="144" height="144" fill="transparent"/>
+        <rect x="0" y="0" width="144" height="23" fill="${color}"/>
+        <text x="72" y="20" text-anchor="middle" dominant-baseline="middle"
+            fill="#000" font-family="Arial,sans-serif" font-size="22" font-weight="bold">${source.toUpperCase()}</text>
+    </svg>`;
+            action.setImage(`data:image/svg+xml;base64,${Buffer.from(svg).toString("base64")}`);
         }
     });
     return _classThis;
@@ -9805,6 +9826,11 @@ const RESTOCK_TITLE = "\n\n\nRestock";
 const SELECT_BOTH_TITLE = "Select\nTrader\n& Mode";
 const SELECT_TRADER_TITLE = "Select\nTrader";
 const SELECT_MODE_TITLE$1 = "Select\nGame\nMode";
+const MODE_BORDER_COLOR = {
+    PVP: "#ffae00",
+    PVE: "#00d9ff",
+    SEASON: "#00ff91",
+};
 function isValidGameMode$1(mode) {
     return mode === "PVP" || mode === "PVE" || mode === "SEASON";
 }
@@ -9837,6 +9863,7 @@ let TarkovTraderRestock = (() => {
         timers = new Map();
         generations = new Map();
         async onWillAppear(ev) {
+            this._hiddenActions.delete(ev.action.id);
             const raw = ev.payload.settings ?? {};
             const settings = migrateLegacy$1(raw);
             if (settings !== raw) {
@@ -9845,7 +9872,7 @@ let TarkovTraderRestock = (() => {
             await this.renderFor(ev.action, settings);
         }
         onWillDisappear(ev) {
-            this.stopTimer(ev.action.id);
+            this._hiddenActions.add(ev.action.id);
         }
         async onDidReceiveSettings(ev) {
             const settings = ev.payload.settings ?? {};
@@ -9863,7 +9890,12 @@ let TarkovTraderRestock = (() => {
             }
             if (!hasMode) {
                 action.setTitle(SELECT_MODE_TITLE$1);
-                this.applyTraderImage(action, settings.selectedTrader);
+                try {
+                    this.applyTraderImage(action, settings.selectedTrader, settings.game_mode);
+                }
+                catch {
+                    action.setImage("");
+                }
                 return;
             }
             if (!hasTrader) {
@@ -9871,7 +9903,12 @@ let TarkovTraderRestock = (() => {
                 action.setImage("");
                 return;
             }
-            this.applyTraderImage(action, settings.selectedTrader);
+            try {
+                this.applyTraderImage(action, settings.selectedTrader, settings.game_mode);
+            }
+            catch {
+                action.setImage("");
+            }
             await this.startUpdating(action, settings);
         }
         async startUpdating(action, settings) {
@@ -9908,31 +9945,109 @@ let TarkovTraderRestock = (() => {
         }
         async renderTick(action, settings, mode) {
             if (!settings.selectedTrader) {
-                action.setTitle(SELECT_TRADER_TITLE);
+                if (!this._hiddenActions.has(action.id))
+                    action.setTitle(SELECT_TRADER_TITLE);
                 return;
             }
             const traders = await tarkovApiService.getTraders(mode);
             const trader = traders.find((t) => t.name === settings.selectedTrader);
             if (!trader) {
-                action.setTitle(NO_DATA_TITLE);
+                if (!this._hiddenActions.has(action.id))
+                    action.setTitle(NO_DATA_TITLE);
                 return;
             }
-            this.renderCountdown(action, trader);
+            this.renderCountdown(action, trader, settings);
         }
-        renderCountdown(action, trader) {
+        _hiddenActions = new Set();
+        _lastRestockAlert = new Set();
+        renderCountdown(action, trader, settings) {
             const remaining = new Date(trader.resetTime).getTime() - Date.now();
+            const isHidden = this._hiddenActions.has(action.id);
             if (remaining <= 0) {
-                action.setTitle(RESTOCK_TITLE);
+                if (!isHidden)
+                    action.setTitle(RESTOCK_TITLE);
+                const alertKey = action.id;
+                if (!this._lastRestockAlert.has(alertKey)) {
+                    this._lastRestockAlert.add(alertKey);
+                    this.playRestockSound(settings);
+                }
                 return;
             }
-            action.setTitle(`\n\n\n${formatCountdown(remaining)}`);
+            this._lastRestockAlert.delete(action.id);
+            if (!isHidden)
+                action.setTitle(`\n\n\n${formatCountdown(remaining)}`);
         }
-        applyTraderImage(action, traderName) {
+        applyTraderImage(action, traderName, gameMode) {
             if (!traderName) {
                 action.setImage("");
                 return;
             }
-            action.setImage(`assets/${traderName}.png`);
+            const imagePath = path.join(process.cwd(), "assets", `${traderName}.png`);
+            if (!fs.existsSync(imagePath)) {
+                action.setImage("");
+                return;
+            }
+            const imgBase64 = fs.readFileSync(imagePath).toString("base64");
+            if (!gameMode) {
+                action.setImage(`data:image/png;base64,${imgBase64}`);
+                return;
+            }
+            const color = MODE_BORDER_COLOR[gameMode];
+            const modeText = gameMode.toUpperCase();
+            const svg = `<svg xmlns="http://www.w3.org/2000/svg"
+        width="144"
+        height="144"
+        viewBox="0 0 144 144">
+
+        <image
+            href="data:image/png;base64,${imgBase64}"
+            x="0"
+            y="0"
+            width="144"
+            height="144"
+            preserveAspectRatio="none"
+        />
+
+        <rect
+            x="0"
+            y="0"
+            width="144"
+            height="23"
+            fill="${color}"
+        />
+
+        <text
+            x="72"
+            y="20"
+            text-anchor="middle"
+            dominant-baseline="middle"
+            fill="#000000"
+            font-family="Arial, sans-serif"
+            font-size="22"
+            font-weight="bold"
+        >${modeText}</text>
+
+    </svg>`;
+            action.setImage(`data:image/svg+xml;base64,${Buffer.from(svg).toString("base64")}`);
+        }
+        async playRestockSound(settings) {
+            if (!settings.soundPath)
+                return;
+            const soundFile = settings.soundPath;
+            streamDeck.logger.info(`[RESTOCK SOUND] Attempting to play: ${soundFile}`);
+            if (!fs.existsSync(soundFile)) {
+                streamDeck.logger.warn(`[RESTOCK SOUND] File not found: ${soundFile}`);
+                return;
+            }
+            try {
+                const { exec } = await import('node:child_process');
+                const escaped = soundFile.replace(/'/g, "''");
+                exec(`powershell -NoProfile -Command "Add-Type -AssemblyName presentationCore; $p = New-Object System.Windows.Media.MediaPlayer; $p.Open('${escaped}'); $p.Play(); Start-Sleep -Seconds 2"`);
+                streamDeck.logger.info(`[RESTOCK SOUND] Playback started`);
+            }
+            catch (err) {
+                streamDeck.logger.error(`[RESTOCK SOUND] Failed: ${err.message}`);
+            }
         }
         async onSendToPlugin(ev) {
             if (typeof ev.payload === "string" && ev.payload === "openPatreon") {
@@ -11052,6 +11167,248 @@ function startBackgroundRefreshers() {
     setInterval(() => tarkovApiService.refreshDatacentersAsync(), INTERVALS.DATACENTER_REFRESH);
 }
 
+const LOG_TS_REGEX = /^(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\.\d{3})\|/;
+class RaidLogWatcher {
+    eftPath = "";
+    currentLogFile = null;
+    bytesRead = 0;
+    pollTimer = null;
+    _raidStart = null;
+    _inRaid = false;
+    onStateChange = null;
+    get inRaid() { return this._inRaid; }
+    get raidStartMs() { return this._raidStart; }
+    get elapsedMs() {
+        return this._raidStart !== null ? Date.now() - this._raidStart : null;
+    }
+    start(eftPath, intervalMs) {
+        this.stop();
+        this.eftPath = eftPath;
+        this.initialScan();
+        this.pollTimer = setInterval(() => this.poll(), intervalMs);
+    }
+    stop() {
+        if (this.pollTimer) {
+            clearInterval(this.pollTimer);
+            this.pollTimer = null;
+        }
+        this.currentLogFile = null;
+        this.bytesRead = 0;
+        this._raidStart = null;
+        this._inRaid = false;
+    }
+    restart(eftPath, intervalMs) {
+        this.stop();
+        this.start(eftPath, intervalMs);
+    }
+    async initialScan() {
+        try {
+            const logFile = await getLatestLogFile(this.eftPath);
+            if (!logFile)
+                return;
+            this.currentLogFile = logFile;
+            await this.scanFileForState(logFile);
+            this.notify();
+        }
+        catch (err) {
+            streamDeck.logger.error("[RAID WATCHER] Initial scan failed:", err);
+        }
+    }
+    async scanFileForState(logFile) {
+        const content = await fs.promises.readFile(logFile, "utf-8");
+        this.bytesRead = Buffer.byteLength(content, "utf-8");
+        let lastStartTs = null;
+        let lastEndTs = null;
+        for (const line of content.split("\n")) {
+            const ts = this.parseTs(line);
+            if (!ts)
+                continue;
+            if (this.isGameStarted(line))
+                lastStartTs = ts;
+            if (this.isBEClientExit(line))
+                lastEndTs = ts;
+        }
+        if (lastStartTs !== null && (lastEndTs === null || lastStartTs > lastEndTs)) {
+            this._inRaid = true;
+            this._raidStart = lastStartTs;
+        }
+        else {
+            this._inRaid = false;
+            this._raidStart = null;
+        }
+    }
+    async poll() {
+        try {
+            const logFile = await getLatestLogFile(this.eftPath);
+            if (!logFile)
+                return;
+            if (logFile !== this.currentLogFile) {
+                this.currentLogFile = logFile;
+                this.bytesRead = 0;
+                this._inRaid = false;
+                this._raidStart = null;
+                await this.scanFileForState(logFile);
+                this.notify();
+                return;
+            }
+            const stat = await fs.promises.stat(logFile);
+            if (stat.size <= this.bytesRead)
+                return;
+            const fd = await fs.promises.open(logFile, "r");
+            const buf = Buffer.alloc(stat.size - this.bytesRead);
+            await fd.read(buf, 0, buf.length, this.bytesRead);
+            await fd.close();
+            this.bytesRead = stat.size;
+            for (const line of buf.toString("utf-8").split("\n")) {
+                const ts = this.parseTs(line);
+                if (!ts)
+                    continue;
+                if (this.isGameStarted(line)) {
+                    this._inRaid = true;
+                    this._raidStart = ts;
+                    this.notify();
+                }
+                if (this.isBEClientExit(line) && this._inRaid) {
+                    this._inRaid = false;
+                    this._raidStart = null;
+                    this.notify();
+                }
+            }
+        }
+        catch (err) {
+            streamDeck.logger.error("[RAID WATCHER] Poll error:", err);
+        }
+    }
+    parseTs(line) {
+        const m = line.match(LOG_TS_REGEX);
+        return m ? new Date(m[1]).getTime() : null;
+    }
+    isGameStarted(line) {
+        return line.includes("GameStarted") && !line.includes("GameStarting");
+    }
+    isBEClientExit(line) {
+        return line.includes("BEClient exit") && !line.includes("successfully");
+    }
+    notify() {
+        this.onStateChange?.(this._inRaid, this._raidStart);
+    }
+}
+const raidLogWatcher = new RaidLogWatcher();
+
+const NO_PATH_TITLE = "Set EFT\nPath";
+const NOT_IN_RAID = "Not in\nRaid";
+let TarkovRaidTimer = (() => {
+    let _classDecorators = [action({ UUID: "eu.tarkovbot.tools.raidtimer" })];
+    let _classDescriptor;
+    let _classExtraInitializers = [];
+    let _classThis;
+    let _classSuper = SingletonAction;
+    (class extends _classSuper {
+        static { _classThis = this; }
+        static {
+            const _metadata = typeof Symbol === "function" && Symbol.metadata ? Object.create(_classSuper[Symbol.metadata] ?? null) : void 0;
+            __esDecorate(null, _classDescriptor = { value: _classThis }, _classDecorators, { kind: "class", name: _classThis.name, metadata: _metadata }, null, _classExtraInitializers);
+            _classThis = _classDescriptor.value;
+            if (_metadata) Object.defineProperty(_classThis, Symbol.metadata, { enumerable: true, configurable: true, writable: true, value: _metadata });
+            __runInitializers(_classThis, _classExtraInitializers);
+        }
+        displayTimer = null;
+        visibleActions = new Set();
+        watcherRunning = false;
+        currentEftPath = "";
+        async onWillAppear(ev) {
+            this.visibleActions.add(ev.action);
+            const eftPath = this.resolveEftPath(ev.payload.settings);
+            await this.ensureWatcher(eftPath);
+            this.renderAction(ev.action);
+            this.ensureDisplayTimer();
+        }
+        onWillDisappear(ev) {
+            this.visibleActions.delete(ev.action);
+            if (this.visibleActions.size === 0 && this.displayTimer) {
+                clearInterval(this.displayTimer);
+                this.displayTimer = null;
+            }
+        }
+        async onDidReceiveSettings(ev) {
+            const eftPath = this.resolveEftPath(ev.payload.settings);
+            if (eftPath !== this.currentEftPath) {
+                await this.ensureWatcher(eftPath);
+            }
+            for (const action of this.visibleActions) {
+                this.renderAction(action);
+            }
+        }
+        async onSendToPlugin(ev) {
+            if (typeof ev.payload === "string" && ev.payload === "openPatreon") {
+                streamDeck.system.openUrl(URL_PATREON);
+            }
+            if (typeof ev.payload === "string" && ev.payload === "autoDetect") {
+                const result = await detectEftPath();
+                if (result.success && result.path) {
+                    settingsService.setEftInstallPath(result.path);
+                    this.currentEftPath = result.path;
+                    raidLogWatcher.restart(result.path, INTERVALS.RAID_TIMER);
+                    for (const action of this.visibleActions) {
+                        this.renderAction(action);
+                    }
+                }
+            }
+        }
+        resolveEftPath(settings) {
+            if (settings?.eft_install_path)
+                return settings.eft_install_path;
+            return settingsService.load().eftInstallPath;
+        }
+        async ensureWatcher(eftPath) {
+            if (!eftPath)
+                return;
+            this.currentEftPath = eftPath;
+            if (!this.watcherRunning) {
+                raidLogWatcher.onStateChange = () => {
+                    for (const action of this.visibleActions) {
+                        this.renderAction(action);
+                    }
+                };
+                raidLogWatcher.start(eftPath, INTERVALS.RAID_TIMER);
+                this.watcherRunning = true;
+            }
+        }
+        ensureDisplayTimer() {
+            if (this.displayTimer)
+                return;
+            this.displayTimer = setInterval(() => {
+                for (const action of this.visibleActions) {
+                    this.renderAction(action);
+                }
+            }, INTERVALS.RAID_TIMER);
+        }
+        renderAction(action) {
+            if (!this.currentEftPath) {
+                action.setTitle(NO_PATH_TITLE);
+                return;
+            }
+            if (!raidLogWatcher.inRaid) {
+                action.setTitle(NOT_IN_RAID);
+                return;
+            }
+            const elapsed = raidLogWatcher.elapsedMs;
+            if (elapsed === null) {
+                action.setTitle(NOT_IN_RAID);
+                return;
+            }
+            action.setTitle(`\n\n${this.formatMMSS(elapsed)}`);
+        }
+        formatMMSS(ms) {
+            const totalSec = Math.floor(ms / 1000);
+            const m = Math.floor(totalSec / 60);
+            const s = totalSec % 60;
+            return `${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
+        }
+    });
+    return _classThis;
+})();
+
 startBackgroundRefreshers();
 streamDeck.actions.registerAction(new TarkovTime());
 streamDeck.actions.registerAction(new TarkovGoonsLocation());
@@ -11066,5 +11423,6 @@ for (const bossInstance of createAllBossInstances()) {
     streamDeck.actions.registerAction(bossInstance);
 }
 streamDeck.actions.registerAction(new TarkovCurrentServerInfo());
+streamDeck.actions.registerAction(new TarkovRaidTimer());
 streamDeck.connect();
 //# sourceMappingURL=plugin.js.map

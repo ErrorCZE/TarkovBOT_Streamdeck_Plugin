@@ -12,6 +12,7 @@ import { TarkovCurrentMapInfo_CurrentServer } from "./actions/current-map-server
 import { TarkovCurrentServerInfo } from "./actions/current-server";
 import { createAllBossInstances } from "./actions/current-map-bosses";
 import { startBackgroundRefreshers } from "./services/background-refresh";
+import { TarkovRaidTimer } from "./actions/raid-timer";
 
 startBackgroundRefreshers();
 
@@ -31,5 +32,7 @@ for (const bossInstance of createAllBossInstances()) {
 }
 
 streamDeck.actions.registerAction(new TarkovCurrentServerInfo());
+
+streamDeck.actions.registerAction(new TarkovRaidTimer());
 
 streamDeck.connect();

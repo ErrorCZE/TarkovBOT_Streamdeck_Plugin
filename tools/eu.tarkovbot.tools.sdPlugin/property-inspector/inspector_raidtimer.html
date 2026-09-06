@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html>
+<head lang="en">
+  <title>RAID TIMER</title>
+  <meta charset="utf-8" />
+  <script src="https://sdpi-components.dev/releases/v4/sdpi-components.js"></script>
+</head>
+<body>
+  <sdpi-item label="EFT Install Path">
+    <sdpi-textfield setting="eft_install_path" placeholder="Auto-detected or manual path"></sdpi-textfield>
+  </sdpi-item>
+
+  <sdpi-item>
+    <sdpi-button onclick="autoDetect()">
+      Auto-Detect EFT Path
+    </sdpi-button>
+  </sdpi-item>
+
+  <div style="padding: 8px; background: rgba(255, 255, 255, 0.05); border-radius: 4px; border-left: 3px solid #00bfff; font-family: system-ui;">
+    <div style="color: #00bfff; font-size: 12px; font-weight: bold; margin-bottom: 4px;">Raid Timer</div>
+    <div style="color: #ccc; font-size: 11px; line-height: 1.4;">
+      Automatically detects when you enter/leave a raid from game logs and displays elapsed time as MM:SS.
+    </div>
+  </div>
+
+  <hr style="border: 0; border-top: 1px solid #333; margin: 20px 10px 10px 10px;">
+
+  <div style="padding: 0 10px 10px 10px; font-family: system-ui; display: flex; flex-direction: column; align-items: center;">
+    <p style="margin: 0 0 8px 0; font-size: 10px; font-weight: 700; text-transform: uppercase; color: #888; letter-spacing: 1px;">Support the Project</p>
+    <button style="width: 100%; background: #FF424D; color: white; border: none; border-radius: 4px; padding: 8px; cursor: pointer; font-size: 12px; font-weight: bold; transition: 0.2s;" onmouseover="this.style.background='#e33b44'" onmouseout="this.style.background='#FF424D'" onclick="SDPIComponents.streamDeckClient.send('sendToPlugin', 'openPatreon');">
+      Visit our Patreon
+    </button>
+  </div>
+
+  <script>
+    function autoDetect() {
+      SDPIComponents.streamDeckClient.send('sendToPlugin', 'autoDetect');
+    }
+  </script>
+</body>
+</html>

@@ -17,6 +17,12 @@ const SELECT_MODE_TITLE = "Select\nGame\nMode";
 const ENTER_TOKEN_TITLE = "Enter\nYour\nToken";
 const SELECT_MODE_AND_TOKEN_TITLE = "Select Mode\n& Token";
 
+const MODE_BORDER_COLOR: Record<string, string> = {
+    PVP: "#ffae00",
+    PVE: "#00d9ff",
+    SEASON: "#00ff91",
+};
+
 function isValidGoonsSource(source: GoonsSource | undefined | string | null): source is GoonsSource {
     return source === "PVP" || source === "PVE" || source === "SEASON";
 }
@@ -55,17 +61,21 @@ export class TarkovGoonsLocation extends SingletonAction {
 
         if (!hasSource && !hasToken) {
             action.setTitle(SELECT_MODE_AND_TOKEN_TITLE);
+            action.setImage("");
             return;
         }
         if (!hasSource) {
             action.setTitle(SELECT_MODE_TITLE);
+            action.setImage("");
             return;
         }
         if (!hasToken) {
             action.setTitle(ENTER_TOKEN_TITLE);
+            action.setImage("");
             return;
         }
 
+        this.applyModeStrip(action, settings.selectedGoonsSource!);
         action.setTitle(DEFAULT_TITLE);
 
         if (settings.auto_refresh) {
@@ -231,5 +241,16 @@ export class TarkovGoonsLocation extends SingletonAction {
                 streamDeck.system.openUrl(URL_PATREON);
                 break;
         }
+    }
+
+    private applyModeStrip(action: any, source: GoonsSource): void {
+        const color = MODE_BORDER_COLOR[source];
+        const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="144" height="144" viewBox="0 0 144 144">
+        <rect width="144" height="144" fill="transparent"/>
+        <rect x="0" y="0" width="144" height="23" fill="${color}"/>
+        <text x="72" y="20" text-anchor="middle" dominant-baseline="middle"
+            fill="#000" font-family="Arial,sans-serif" font-size="22" font-weight="bold">${source.toUpperCase()}</text>
+    </svg>`;
+        action.setImage(`data:image/svg+xml;base64,${Buffer.from(svg).toString("base64")}`);
     }
 }

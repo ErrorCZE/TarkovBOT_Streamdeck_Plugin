@@ -1,0 +1,5 @@
+- Přidána podpora režimu Season pro všechny existující akce
+- Přidáno vizuální rozlišení modu pro restocky
+- Přidána možnost nastavit si zvukový efekt pro jednotlivé tradery na jejich 
+- Přidán auto refresh pro akci Goons 
+- Refactored celý kod, implementován caching a další věci, které vás určitě nezajímají :D

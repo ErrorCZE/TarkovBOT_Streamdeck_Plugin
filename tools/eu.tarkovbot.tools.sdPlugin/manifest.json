@@ -526,6 +526,27 @@
                         "UserTitleEnabled": false,
                         "VisibleInActionsList": false,
                         "SupportedInMultiActions": false
+                },
+                {
+                        "Name": "Raid Timer",
+                        "UUID": "eu.tarkovbot.tools.raidtimer",
+                        "Icon": "assets/actionicon_raidtimer",
+                        "Tooltip": "Automatically tracks raid time from game logs. Shows MM:SS timer while in raid.",
+                        "PropertyInspectorPath": "property-inspector/inspector_raidtimer.html",
+                        "Controllers": [
+                                "Keypad"
+                        ],
+                        "States": [
+                                {
+                                        "Image": "assets/empty_image",
+                                        "TitleAlignment": "middle",
+                                        "FontSize": 18
+                                }
+                        ],
+                        "Encoder": {
+                                "layout": "$B1"
+                        },
+                        "UserTitleEnabled": false
                 }
         ],
         "Profiles": [
