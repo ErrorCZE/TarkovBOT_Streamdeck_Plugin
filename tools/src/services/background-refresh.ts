@@ -1,6 +1,7 @@
 import { INTERVALS } from "../config/constants";
 import { tarkovApiService } from "./api-service";
 import { settingsService } from "./settings-service";
+import { ALL_GAME_MODES } from "../types";
 import type { GameMode } from "../types";
 
 let started = false;
@@ -13,9 +14,10 @@ export function startBackgroundRefreshers(): void {
     if (started) return;
     started = true;
 
-    const mode = currentMode();
-    tarkovApiService.refreshMapsAsync(mode);
-    tarkovApiService.refreshTradersAsync(mode);
+    for (const mode of ALL_GAME_MODES) {
+        tarkovApiService.refreshMapsAsync(mode);
+        tarkovApiService.refreshTradersAsync(mode);
+    }
     tarkovApiService.refreshLocalMapNamesAsync();
     tarkovApiService.refreshDatacentersAsync();
 

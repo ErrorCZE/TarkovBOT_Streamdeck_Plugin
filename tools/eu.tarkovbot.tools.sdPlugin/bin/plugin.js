@@ -9219,15 +9219,15 @@ const BOSS_IMAGE_FALLBACK = `${BOSS_IMAGE_BASE}/unknown_boss.webp`;
 const URL_PATREON = "https://patreon.com/tarkovboteu";
 const URL_WEBSITE = "https://tarkovbot.eu/stream-deck";
 const INTERVALS = {
-    TARKOV_TIME: 2_000,
-    MAP_INFO_AUTO_UPDATE: 5_000,
-    MAP_DISCOVERY: 10_000,
-    TRADER_RESTOCK: 1_000,
-    MAP_DATA_REFRESH: 1_200_000,
-    TRADER_DATA_REFRESH: 60_000,
-    DATACENTER_REFRESH: 3_600_000,
-    GOONS_AUTO_REFRESH: 300_000,
-    RAID_TIMER: 1_000,
+    TARKOV_TIME: 2_000, // 2 seconds
+    MAP_INFO_AUTO_UPDATE: 5_000, // 5 seconds
+    MAP_DISCOVERY: 10_000, // 10 seconds
+    TRADER_RESTOCK: 1_000, // 1 second
+    MAP_DATA_REFRESH: 2_700_000, // 45 minutes
+    TRADER_DATA_REFRESH: 600_000, // 10 minutes
+    DATACENTER_REFRESH: 10_800_000, // 3 hours
+    GOONS_AUTO_REFRESH: 300_000, // 5 minutes
+    RAID_TIMER: 1_000, // 1 second
 };
 const TARKOV_TIME_MULTIPLIER = 7;
 const TARKOV_TIME_OFFSET_MS = 12 * 60 * 60 * 1000;
@@ -10764,7 +10764,6 @@ let TarkovCurrentMapInfo_Boss = (() => {
         }
         bossIndex;
         timer = null;
-        lastGameMode = null;
         constructor(bossIndex) {
             super();
             this.bossIndex = bossIndex;
@@ -10784,10 +10783,6 @@ let TarkovCurrentMapInfo_Boss = (() => {
         }
         async updateBossInfo(ev) {
             const settings = settingsService.load();
-            if (this.lastGameMode !== null && this.lastGameMode !== settings.game_mode) {
-                tarkovApiService.invalidateBossImageCache();
-            }
-            this.lastGameMode = settings.game_mode;
             const locationId = stateService.currentLocationId;
             if (!locationId) {
                 ev.action.setTitle("\nUnknown\nLocation");
@@ -11150,6 +11145,9 @@ function createAllBossInstances() {
 const ALL_GAME_MODES = ["PVP", "PVE", "SEASON"];
 
 let started = false;
+function currentMode() {
+    return settingsService.load().game_mode ?? "PVP";
+}
 function startBackgroundRefreshers() {
     if (started)
         return;
@@ -11160,11 +11158,15 @@ function startBackgroundRefreshers() {
     }
     tarkovApiService.refreshLocalMapNamesAsync();
     tarkovApiService.refreshDatacentersAsync();
-    for (const mode of ALL_GAME_MODES) {
-        setInterval(() => tarkovApiService.refreshMapsAsync(mode), INTERVALS.MAP_DATA_REFRESH);
-        setInterval(() => tarkovApiService.refreshTradersAsync(mode), INTERVALS.TRADER_DATA_REFRESH);
-    }
-    setInterval(() => tarkovApiService.refreshDatacentersAsync(), INTERVALS.DATACENTER_REFRESH);
+    setInterval(() => {
+        tarkovApiService.refreshTradersAsync(currentMode());
+    }, INTERVALS.TRADER_DATA_REFRESH);
+    setInterval(() => {
+        tarkovApiService.refreshMapsAsync(currentMode());
+    }, INTERVALS.MAP_DATA_REFRESH);
+    setInterval(() => {
+        tarkovApiService.refreshDatacentersAsync();
+    }, INTERVALS.DATACENTER_REFRESH);
 }
 
 const LOG_TS_REGEX = /^(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\.\d{3})\|/;

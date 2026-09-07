@@ -3,13 +3,12 @@ import { INTERVALS } from "../config/constants";
 import { tarkovApiService } from "../services/api-service";
 import { settingsService } from "../services/settings-service";
 import { stateService } from "../services/state-service";
-import type { ConsolidatedBoss, GameMode } from "../types";
+import type { ConsolidatedBoss } from "../types";
 
 @action({ UUID: "eu.tarkovbot.tools.mapinfo.boss" })
 export class TarkovCurrentMapInfo_Boss extends SingletonAction {
     protected readonly bossIndex: number;
     private timer: NodeJS.Timeout | null = null;
-    private lastGameMode: GameMode | null = null;
 
     constructor(bossIndex: number) {
         super();
