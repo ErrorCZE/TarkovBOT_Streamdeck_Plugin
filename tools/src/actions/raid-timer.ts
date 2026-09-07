@@ -11,7 +11,7 @@ import type { JsonValue, JsonObject } from "@elgato/utils";
 import { INTERVALS, URL_PATREON } from "../config/constants";
 import { raidLogWatcher } from "../services/raid-log-watcher";
 import { settingsService } from "../services/settings-service";
-import { detectEftPath } from "../services/path-detect-service";
+import { handleCommonCommands } from "./base/command-handler";
 import type { RaidTimerSettings } from "../types";
 
 const NO_PATH_TITLE = "Set EFT\nPath";
@@ -53,15 +53,21 @@ export class TarkovRaidTimer extends SingletonAction {
     }
 
     override async onSendToPlugin(ev: SendToPluginEvent<JsonValue, JsonObject>): Promise<void> {
+        // Legacy: openPatreon přijde jako plain string
         if (typeof ev.payload === "string" && ev.payload === "openPatreon") {
             streamDeck.system.openUrl(URL_PATREON);
+            return;
         }
-        if (typeof ev.payload === "string" && ev.payload === "autoDetect") {
-            const result = await detectEftPath();
-            if (result.success && result.path) {
-                settingsService.setEftInstallPath(result.path);
-                this.currentEftPath = result.path;
-                raidLogWatcher.restart(result.path, INTERVALS.RAID_TIMER);
+
+        const handled = await handleCommonCommands(ev);
+        if (!handled) return;
+
+        const payload = ev.payload as { command?: string };
+        if (payload?.command === "autoDetectPath") {
+            const settings = settingsService.load();
+            if (settings.eftInstallPath) {
+                this.currentEftPath = settings.eftInstallPath;
+                raidLogWatcher.restart(settings.eftInstallPath, INTERVALS.RAID_TIMER);
                 for (const action of this.visibleActions) {
                     this.renderAction(action);
                 }

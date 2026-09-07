@@ -10162,7 +10162,7 @@ class SettingsService {
 }
 const settingsService = new SettingsService();
 
-async function handleCommonCommands(ev) {
+async function handleCommonCommands$1(ev) {
     if (typeof ev.payload === "string") {
         if (ev.payload === "openPatreon") {
             streamDeck.system.openUrl(URL_PATREON);
@@ -10410,7 +10410,7 @@ let TarkovCurrentMapInfo = (() => {
             }
         }
         async onSendToPlugin(ev) {
-            const handled = await handleCommonCommands(ev);
+            const handled = await handleCommonCommands$1(ev);
             if (handled)
                 return;
         }
@@ -10708,7 +10708,7 @@ let TarkovCurrentServerInfo = (() => {
             this.stopTimer(ev.action.id);
         }
         async onSendToPlugin(ev) {
-            const handled = await handleCommonCommands(ev);
+            const handled = await handleCommonCommands$1(ev);
             if (handled)
                 return;
             streamDeck.logger.info("raidserver onSendToPlugin (unhandled):", JSON.stringify(ev.payload));
@@ -11342,15 +11342,20 @@ let TarkovRaidTimer = (() => {
             }
         }
         async onSendToPlugin(ev) {
+            // Legacy: openPatreon přijde jako plain string
             if (typeof ev.payload === "string" && ev.payload === "openPatreon") {
                 streamDeck.system.openUrl(URL_PATREON);
+                return;
             }
-            if (typeof ev.payload === "string" && ev.payload === "autoDetect") {
-                const result = await detectEftPath();
-                if (result.success && result.path) {
-                    settingsService.setEftInstallPath(result.path);
-                    this.currentEftPath = result.path;
-                    raidLogWatcher.restart(result.path, INTERVALS.RAID_TIMER);
+            const handled = await handleCommonCommands$1(ev);
+            if (!handled)
+                return;
+            const payload = ev.payload;
+            if (payload?.command === "autoDetectPath") {
+                const settings = settingsService.load();
+                if (settings.eftInstallPath) {
+                    this.currentEftPath = settings.eftInstallPath;
+                    raidLogWatcher.restart(settings.eftInstallPath, INTERVALS.RAID_TIMER);
                     for (const action of this.visibleActions) {
                         this.renderAction(action);
                     }

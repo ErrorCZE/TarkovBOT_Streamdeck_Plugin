@@ -1,25 +1,29 @@
 <!DOCTYPE html>
 <html>
+
 <head lang="en">
   <title>RAID TIMER</title>
   <meta charset="utf-8" />
   <script src="https://sdpi-components.dev/releases/v4/sdpi-components.js"></script>
 </head>
+
 <body>
-  <sdpi-item label="EFT Install Path">
-    <sdpi-textfield setting="eft_install_path" placeholder="Auto-detected or manual path"></sdpi-textfield>
+  <sdpi-item label="EFT Path">
+    <div style="display: flex; flex-direction: column; width: 100%; gap: 8px;">
+      <sdpi-textfield id="eft_path_input" setting="eft_install_path" placeholder="Enter path to EFT folder"></sdpi-textfield>
+      <button style="background: #0078d4; color: white; border: none; border-radius: 4px; padding: 7px; cursor: pointer; font-size: 12px; font-weight: bold;" id="autoDetectBtn" onclick="autoDetectPath()">
+        Auto Detect
+      </button>
+    </div>
   </sdpi-item>
 
-  <sdpi-item>
-    <sdpi-button onclick="autoDetect()">
-      Auto-Detect EFT Path
-    </sdpi-button>
-  </sdpi-item>
+  <div id="statusMessage" style="display: none; margin: 10px; padding: 8px; border-radius: 4px; font-size: 12px; font-family: system-ui;"></div>
 
-  <div style="padding: 8px; background: rgba(255, 255, 255, 0.05); border-radius: 4px; border-left: 3px solid #00bfff; font-family: system-ui;">
-    <div style="color: #00bfff; font-size: 12px; font-weight: bold; margin-bottom: 4px;">Raid Timer</div>
-    <div style="color: #ccc; font-size: 11px; line-height: 1.4;">
-      Automatically detects when you enter/leave a raid from game logs and displays elapsed time as MM:SS.
+  <div style="padding: 8px; background: rgba(255, 255, 255, 0.05); border-radius: 4px; border-left: 3px solid lime; font-family: system-ui;">
+
+    <div style="margin-bottom: 10px;">
+      <b style="color: white; font-size: 12px;">Auto Detect:</b>
+      <div style="color: #ccc; font-size: 11px; line-height: 1.4;">Automatically finds your EFT installation from the Windows Registry.</div>
     </div>
   </div>
 
@@ -33,9 +37,49 @@
   </div>
 
   <script>
-    function autoDetect() {
-      SDPIComponents.streamDeckClient.send('sendToPlugin', 'autoDetect');
+    const streamDeckClient = SDPIComponents.streamDeckClient;
+    streamDeckClient.sendToPropertyInspector.subscribe((ev) => handlePluginMessage(ev.payload));
+    streamDeckClient.send('sendToPlugin', {
+      command: 'getGlobalSettings'
+    });
+
+    function handlePluginMessage(data) {
+      const statusEl = document.getElementById('statusMessage');
+      const btn = document.getElementById('autoDetectBtn');
+
+      if (data.event === 'autoDetectResult') {
+        btn.disabled = false;
+        btn.textContent = 'Auto Detect';
+        statusEl.style.display = 'block';
+        if (data.success) {
+          statusEl.style.background = 'rgba(0, 255, 0, 0.1)';
+          statusEl.style.color = '#69db7c';
+          statusEl.textContent = 'Found: ' + data.path;
+        } else {
+          statusEl.style.background = 'rgba(255, 0, 0, 0.1)';
+          statusEl.style.color = '#ff6b6b';
+          statusEl.textContent = data.error || 'EFT not found';
+        }
+        setTimeout(() => {
+          statusEl.style.display = 'none';
+        }, 5000);
+      } else if (data.event === 'globalSettings') {
+        if (data.eft_install_path) {
+          const pathInput = document.querySelector('sdpi-textfield[setting="eft_install_path"]');
+          if (pathInput && !pathInput.value) pathInput.value = data.eft_install_path;
+        }
+      }
+    }
+
+    function autoDetectPath() {
+      const btn = document.getElementById('autoDetectBtn');
+      //btn.disabled = true;
+      //btn.textContent = 'Detecting...'; //TODO: FIX FEEDBACK
+      streamDeckClient.send('sendToPlugin', {
+        command: 'autoDetectPath'
+      });
     }
   </script>
 </body>
+
 </html>
