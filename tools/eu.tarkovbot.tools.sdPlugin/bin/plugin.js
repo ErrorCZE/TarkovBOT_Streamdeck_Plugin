@@ -9331,7 +9331,7 @@ const DEFAULT_TITLE$1 = `Get\nGoons\nLocation`;
 const SELECT_MODE_TITLE$2 = "Select\nGame\nMode";
 const ENTER_TOKEN_TITLE = "Enter\nYour\nToken";
 const SELECT_MODE_AND_TOKEN_TITLE = "Select Mode\n& Token";
-const MODE_BORDER_COLOR$1 = {
+const MODE_BORDER_COLOR$2 = {
     PVP: "#ffae00",
     PVE: "#00d9ff",
     SEASON: "#00ff91",
@@ -9542,7 +9542,7 @@ let TarkovGoonsLocation = (() => {
             }
         }
         applyModeStrip(action, source) {
-            const color = MODE_BORDER_COLOR$1[source];
+            const color = MODE_BORDER_COLOR$2[source];
             const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="144" height="144" viewBox="0 0 144 144">
         <rect width="144" height="144" fill="transparent"/>
         <rect x="0" y="0" width="144" height="23" fill="${color}"/>
@@ -9826,7 +9826,7 @@ const RESTOCK_TITLE = "\n\n\nRestock";
 const SELECT_BOTH_TITLE = "Select\nTrader\n& Mode";
 const SELECT_TRADER_TITLE = "Select\nTrader";
 const SELECT_MODE_TITLE$1 = "Select\nGame\nMode";
-const MODE_BORDER_COLOR = {
+const MODE_BORDER_COLOR$1 = {
     PVP: "#ffae00",
     PVE: "#00d9ff",
     SEASON: "#00ff91",
@@ -9992,7 +9992,7 @@ let TarkovTraderRestock = (() => {
                 action.setImage(`data:image/png;base64,${imgBase64}`);
                 return;
             }
-            const color = MODE_BORDER_COLOR[gameMode];
+            const color = MODE_BORDER_COLOR$1[gameMode];
             const modeText = gameMode.toUpperCase();
             const svg = `<svg xmlns="http://www.w3.org/2000/svg"
         width="144"
@@ -10318,6 +10318,21 @@ async function findCurrentMapFromLogs(eftPath, mode) {
 }
 
 const SELECT_MODE_TITLE = "Select\nGame\nMode";
+const MODE_BORDER_COLOR = {
+    PVP: "#ffae00",
+    PVE: "#00d9ff",
+    SEASON: "#00ff91",
+};
+function applyModeStrip(action, mode) {
+    const color = MODE_BORDER_COLOR[mode];
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="144" height="144" viewBox="0 0 144 144">
+        <rect width="144" height="144" fill="transparent"/>
+        <rect x="0" y="0" width="144" height="23" fill="${color}"/>
+        <text x="72" y="20" text-anchor="middle" dominant-baseline="middle"
+            fill="#000" font-family="Arial,sans-serif" font-size="22" font-weight="bold">${mode.toUpperCase()}</text>
+    </svg>`;
+    action.setImage(`data:image/svg+xml;base64,${Buffer.from(svg).toString("base64")}`);
+}
 function isValidGameMode(mode) {
     return mode === "PVP" || mode === "PVE" || mode === "SEASON";
 }
@@ -10358,8 +10373,10 @@ let TarkovCurrentMapInfo = (() => {
             settings = await this.maybeInheritFromGlobal(ev.action, settings);
             if (!isValidGameMode(settings.game_mode)) {
                 ev.action.setTitle(SELECT_MODE_TITLE);
+                ev.action.setImage("");
                 return;
             }
+            applyModeStrip(ev.action, settings.game_mode);
             ev.action.setTitle(`Get\nCurrent\nMap Info`);
         }
         async onKeyDown(ev) {
@@ -10398,9 +10415,11 @@ let TarkovCurrentMapInfo = (() => {
             const settings = ev.payload.settings ?? {};
             if (!isValidGameMode(settings.game_mode)) {
                 ev.action.setTitle(SELECT_MODE_TITLE);
+                ev.action.setImage("");
                 this.stopAutoUpdate(ev.action.id);
                 return;
             }
+            applyModeStrip(ev.action, settings.game_mode);
             settingsService.setMapInfoFlags({
                 map_autoupdate_check: settings.map_autoupdate_check,
                 game_mode: settings.game_mode,

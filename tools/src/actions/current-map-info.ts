@@ -18,6 +18,23 @@ import type { GameMode, MapInfoSettings } from "../types";
 
 const SELECT_MODE_TITLE = "Select\nGame\nMode";
 
+const MODE_BORDER_COLOR: Record<GameMode, string> = {
+    PVP: "#ffae00",
+    PVE: "#00d9ff",
+    SEASON: "#00ff91",
+};
+
+function applyModeStrip(action: any, mode: GameMode): void {
+    const color = MODE_BORDER_COLOR[mode];
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="144" height="144" viewBox="0 0 144 144">
+        <rect width="144" height="144" fill="transparent"/>
+        <rect x="0" y="0" width="144" height="23" fill="${color}"/>
+        <text x="72" y="20" text-anchor="middle" dominant-baseline="middle"
+            fill="#000" font-family="Arial,sans-serif" font-size="22" font-weight="bold">${mode.toUpperCase()}</text>
+    </svg>`;
+    action.setImage(`data:image/svg+xml;base64,${Buffer.from(svg).toString("base64")}`);
+}
+
 function isValidGameMode(mode: unknown): mode is GameMode {
     return mode === "PVP" || mode === "PVE" || mode === "SEASON";
 }
@@ -47,9 +64,11 @@ export class TarkovCurrentMapInfo extends SingletonAction {
 
         if (!isValidGameMode(settings.game_mode)) {
             ev.action.setTitle(SELECT_MODE_TITLE);
+            ev.action.setImage("");
             return;
         }
 
+        applyModeStrip(ev.action, settings.game_mode);
         ev.action.setTitle(`Get\nCurrent\nMap Info`);
     }
 
@@ -113,9 +132,12 @@ export class TarkovCurrentMapInfo extends SingletonAction {
 
         if (!isValidGameMode(settings.game_mode)) {
             ev.action.setTitle(SELECT_MODE_TITLE);
+            ev.action.setImage("");
             this.stopAutoUpdate(ev.action.id);
             return;
         }
+
+        applyModeStrip(ev.action, settings.game_mode);
 
         settingsService.setMapInfoFlags({
             map_autoupdate_check: settings.map_autoupdate_check,
