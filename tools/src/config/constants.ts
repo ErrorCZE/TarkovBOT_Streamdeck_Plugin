@@ -45,15 +45,15 @@ export const URL_PATREON = "https://patreon.com/tarkovboteu";
 export const URL_WEBSITE = "https://tarkovbot.eu/stream-deck";
 
 export const INTERVALS = {
-    TARKOV_TIME: 2_000,
-    MAP_INFO_AUTO_UPDATE: 5_000,
-    MAP_DISCOVERY: 10_000,
-    TRADER_RESTOCK: 1_000,
-    MAP_DATA_REFRESH: 1_200_000,
-    TRADER_DATA_REFRESH: 60_000,
-    DATACENTER_REFRESH: 3_600_000,
-    GOONS_AUTO_REFRESH: 300_000,
-    RAID_TIMER: 1_000,
+    TARKOV_TIME: 2_000, // 2 seconds
+    MAP_INFO_AUTO_UPDATE: 5_000, // 5 seconds
+    MAP_DISCOVERY: 10_000, // 10 seconds
+    TRADER_RESTOCK: 1_000, // 1 second
+    MAP_DATA_REFRESH: 2_700_000, // 45 minutes
+    TRADER_DATA_REFRESH: 600_000, // 10 minutes
+    DATACENTER_REFRESH: 10_800_000, // 3 hours
+    GOONS_AUTO_REFRESH: 300_000, // 5 minutes
+    RAID_TIMER: 1_000, // 1 second
 } as const;
 
 export const TARKOV_TIME_MULTIPLIER = 7;

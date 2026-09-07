@@ -35,11 +35,6 @@ export class TarkovCurrentMapInfo_Boss extends SingletonAction {
     private async updateBossInfo(ev: WillAppearEvent): Promise<void> {
         const settings = settingsService.load();
 
-        if (this.lastGameMode !== null && this.lastGameMode !== settings.game_mode) {
-            tarkovApiService.invalidateBossImageCache();
-        }
-        this.lastGameMode = settings.game_mode;
-
         const locationId = stateService.currentLocationId;
         if (!locationId) {
             ev.action.setTitle("\nUnknown\nLocation");

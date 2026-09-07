@@ -1,22 +1,33 @@
 import { INTERVALS } from "../config/constants";
 import { tarkovApiService } from "./api-service";
-import { ALL_GAME_MODES } from "../types";
+import { settingsService } from "./settings-service";
+import type { GameMode } from "../types";
 
 let started = false;
+
+function currentMode(): GameMode {
+    return settingsService.load().game_mode ?? "PVP";
+}
+
 export function startBackgroundRefreshers(): void {
     if (started) return;
     started = true;
 
-    for (const mode of ALL_GAME_MODES) {
-        tarkovApiService.refreshMapsAsync(mode);
-        tarkovApiService.refreshTradersAsync(mode);
-    }
+    const mode = currentMode();
+    tarkovApiService.refreshMapsAsync(mode);
+    tarkovApiService.refreshTradersAsync(mode);
     tarkovApiService.refreshLocalMapNamesAsync();
     tarkovApiService.refreshDatacentersAsync();
 
-    for (const mode of ALL_GAME_MODES) {
-        setInterval(() => tarkovApiService.refreshMapsAsync(mode), INTERVALS.MAP_DATA_REFRESH);
-        setInterval(() => tarkovApiService.refreshTradersAsync(mode), INTERVALS.TRADER_DATA_REFRESH);
-    }
-    setInterval(() => tarkovApiService.refreshDatacentersAsync(), INTERVALS.DATACENTER_REFRESH);
+    setInterval(() => {
+        tarkovApiService.refreshTradersAsync(currentMode());
+    }, INTERVALS.TRADER_DATA_REFRESH);
+
+    setInterval(() => {
+        tarkovApiService.refreshMapsAsync(currentMode());
+    }, INTERVALS.MAP_DATA_REFRESH);
+
+    setInterval(() => {
+        tarkovApiService.refreshDatacentersAsync();
+    }, INTERVALS.DATACENTER_REFRESH);
 }
