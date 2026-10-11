@@ -47,6 +47,8 @@ function migrateLegacy(settings: TraderRestockSettings): TraderRestockSettings {
 export class TarkovTraderRestock extends SingletonAction {
     private timers = new Map<string, NodeJS.Timeout>();
     private generations = new Map<string, number>();
+    /** Game mode currently used by each action (for restock watcher registration). */
+    private actionModes = new Map<string, GameMode>();
 
     override async onWillAppear(ev: WillAppearEvent<TraderRestockSettings>): Promise<void> {
         this._hiddenActions.delete(ev.action.id);
@@ -60,6 +62,9 @@ export class TarkovTraderRestock extends SingletonAction {
 
     override onWillDisappear(ev: WillDisappearEvent<TraderRestockSettings>): void | Promise<void> {
         this._hiddenActions.add(ev.action.id);
+        // Tell the API service this action no longer uses its game mode, so it
+        // can stop fetching trader data when nobody needs it anymore.
+        this.setActionMode(ev.action.id, undefined);
     }
 
     override async onDidReceiveSettings(
@@ -75,6 +80,10 @@ export class TarkovTraderRestock extends SingletonAction {
 
         const hasMode = isValidGameMode(settings.game_mode);
         const hasTrader = !!settings.selectedTrader;
+
+        // Register/unregister the used game mode with the API service
+        // (restock watcher only fetches modes that are actually displayed).
+        this.setActionMode(actionId, hasMode ? (settings.game_mode as GameMode) : undefined);
 
         if (!hasMode && !hasTrader) {
             action.setTitle(SELECT_BOTH_TITLE);
@@ -141,6 +150,19 @@ export class TarkovTraderRestock extends SingletonAction {
         const gen = (this.generations.get(actionId) ?? 0) + 1;
         this.generations.set(actionId, gen);
         return gen;
+    }
+
+    /** Track which game mode an action uses and (un)register it with the API service. */
+    private setActionMode(actionId: string, mode: GameMode | undefined): void {
+        const prev = this.actionModes.get(actionId);
+        if (prev === mode) return;
+        if (prev) tarkovApiService.releaseTraders(prev);
+        if (mode) {
+            tarkovApiService.acquireTraders(mode);
+            this.actionModes.set(actionId, mode);
+        } else {
+            this.actionModes.delete(actionId);
+        }
     }
 
     private async renderTick(

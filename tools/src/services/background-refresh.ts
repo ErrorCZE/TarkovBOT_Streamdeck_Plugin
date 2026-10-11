@@ -16,14 +16,9 @@ export function startBackgroundRefreshers(): void {
 
     for (const mode of ALL_GAME_MODES) {
         tarkovApiService.refreshMapsAsync(mode);
-        tarkovApiService.refreshTradersAsync(mode);
     }
     tarkovApiService.refreshLocalMapNamesAsync();
     tarkovApiService.refreshDatacentersAsync();
-
-    setInterval(() => {
-        tarkovApiService.refreshTradersAsync(currentMode());
-    }, INTERVALS.TRADER_DATA_REFRESH);
 
     setInterval(() => {
         tarkovApiService.refreshMapsAsync(currentMode());

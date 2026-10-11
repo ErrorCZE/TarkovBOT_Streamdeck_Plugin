@@ -9224,10 +9224,13 @@ const INTERVALS = {
     MAP_DISCOVERY: 10_000, // 10 seconds
     TRADER_RESTOCK: 1_000, // 1 second
     MAP_DATA_REFRESH: 2_700_000, // 45 minutes
-    TRADER_DATA_REFRESH: 600_000, // 10 minutes
     DATACENTER_REFRESH: 10_800_000, // 3 hours
     GOONS_AUTO_REFRESH: 300_000, // 5 minutes
     RAID_TIMER: 1_000, // 1 second
+    TRADER_RESTOCK_RECHECK_BUFFER_MS: 5_000, // grace period after a resetTime passes before fetching
+    TRADER_RESTOCK_RETRY_BASE_MS: 15_000, // first re-fetch delay while someone is still restocked
+    TRADER_RESTOCK_RETRY_MULTIPLIER: 2, // delay growth per attempt
+    TRADER_RESTOCK_RETRY_MAX_MS: 1_200_000, // growth cap (20 minutes)
 };
 const TARKOV_TIME_MULTIPLIER = 7;
 const TARKOV_TIME_OFFSET_MS = 12 * 60 * 60 * 1000;
@@ -9676,11 +9679,18 @@ class TarkovApiService {
         PVE: new TTLCache(INTERVALS.MAP_DATA_REFRESH),
         SEASON: new TTLCache(INTERVALS.MAP_DATA_REFRESH),
     };
-    tradersCache = {
-        PVP: new TTLCache(INTERVALS.TRADER_DATA_REFRESH),
-        PVE: new TTLCache(INTERVALS.TRADER_DATA_REFRESH),
-        SEASON: new TTLCache(INTERVALS.TRADER_DATA_REFRESH),
+    tradersData = {
+        PVP: [],
+        PVE: [],
+        SEASON: [],
     };
+    traderWatchers = {
+        PVP: { timer: null, retryCount: 0 },
+        PVE: { timer: null, retryCount: 0 },
+        SEASON: { timer: null, retryCount: 0 },
+    };
+    /** Number of restock actions currently using each game mode. */
+    traderActionCounts = { PVP: 0, PVE: 0, SEASON: 0 };
     localMapNamesCache = [];
     localMapNamesLoaded = false;
     bossImageCache = new Map();
@@ -9714,34 +9724,135 @@ class TarkovApiService {
     refreshMapsAsync(mode) {
         void this.refreshMaps(mode);
     }
+    // ---------- Trader restocks (restock-aware fetching) ----------
+    /** Called by a restock action when it starts using a game mode. */
+    acquireTraders(mode) {
+        this.traderActionCounts[mode] += 1;
+    }
+    /** Called when a restock action stops using (or hides) a game mode. */
+    releaseTraders(mode) {
+        this.traderActionCounts[mode] = Math.max(0, this.traderActionCounts[mode] - 1);
+        if (this.traderActionCounts[mode] === 0) {
+            // No restock action uses this mode anymore -> stop fetching it.
+            this.clearTraderWatcher(mode);
+            this.traderWatchers[mode].retryCount = 0;
+            streamDeck.logger.info(`Trader restock watcher for ${mode} stopped (no action uses it).`);
+        }
+    }
+    clearTraderWatcher(mode) {
+        const watcher = this.traderWatchers[mode];
+        if (watcher.timer) {
+            clearTimeout(watcher.timer);
+            watcher.timer = null;
+        }
+    }
+    isTraderWatcherActive(mode) {
+        return this.traderWatchers[mode].timer !== null;
+    }
+    /** A trader counts as "restocked" while his resetTime lies in the past. */
+    evaluateTraders(traders) {
+        const now = Date.now();
+        let anyRestocked = false;
+        let earliestFuture = Number.POSITIVE_INFINITY;
+        for (const trader of traders) {
+            const ts = new Date(trader.resetTime).getTime();
+            if (!Number.isFinite(ts))
+                continue;
+            if (ts <= now) {
+                anyRestocked = true;
+            }
+            else if (ts < earliestFuture) {
+                earliestFuture = ts;
+            }
+        }
+        return {
+            anyRestocked,
+            msUntilNextRestock: earliestFuture === Number.POSITIVE_INFINITY
+                ? Number.POSITIVE_INFINITY
+                : earliestFuture - now,
+        };
+    }
+    traderRetryDelayMs(retryCount) {
+        const growth = Math.pow(INTERVALS.TRADER_RESTOCK_RETRY_MULTIPLIER, Math.max(0, retryCount - 1));
+        return Math.min(INTERVALS.TRADER_RESTOCK_RETRY_BASE_MS * growth, INTERVALS.TRADER_RESTOCK_RETRY_MAX_MS);
+    }
+    scheduleTraderWatch(mode, fetchFailed) {
+        this.clearTraderWatcher(mode);
+        const watcher = this.traderWatchers[mode];
+        // Never fetch a game mode that no restock action is using.
+        if (this.traderActionCounts[mode] === 0)
+            return;
+        const traders = this.tradersData[mode] ?? [];
+        const { anyRestocked, msUntilNextRestock } = this.evaluateTraders(traders);
+        if (fetchFailed || traders.length === 0 || anyRestocked) {
+            // Data is missing or a trader is restocked right now: re-fetch with a
+            // growing interval until data arrives where NOBODY is restocked.
+            watcher.retryCount += 1;
+            const delay = this.traderRetryDelayMs(watcher.retryCount);
+            const reason = fetchFailed
+                ? "fetch failed"
+                : traders.length === 0
+                    ? "no data"
+                    : "a trader is restocked";
+            streamDeck.logger.info(`${mode} trader data not clean yet (${reason}), retry #${watcher.retryCount} in ${Math.round(delay / 1000)}s`);
+            watcher.timer = setTimeout(() => {
+                watcher.timer = null;
+                void this.refreshTraders(mode);
+            }, delay);
+            return;
+        }
+        watcher.retryCount = 0;
+        const delay = Number.isFinite(msUntilNextRestock)
+            ? msUntilNextRestock + INTERVALS.TRADER_RESTOCK_RECHECK_BUFFER_MS
+            : INTERVALS.TRADER_RESTOCK_RETRY_MAX_MS;
+        watcher.timer = setTimeout(() => {
+            watcher.timer = null;
+            void this.refreshTraders(mode);
+        }, delay);
+        streamDeck.logger.info(`Next ${mode} trader fetch scheduled for the next restock in ${Math.round(delay / 60_000)} min.`);
+    }
     refreshTraders = dedupe(async (mode) => {
         const url = traderResetsEndpoint(mode);
+        let fetched = false;
         try {
             const res = await fetch(url);
             const json = await res.json();
-            if (!isTradersApiResponse(json))
-                return [];
-            const traders = json.data.traders.map((t) => ({
-                name: String(t.name ?? ""),
-                resetTime: String(t.resetTime ?? ""),
-            }));
-            this.tradersCache[mode].set(traders);
-            streamDeck.logger.info(`Processed ${mode} trader data (${traders.length} traders)`);
-            return traders;
+            if (isTradersApiResponse(json)) {
+                const traders = json.data.traders.map((t) => ({
+                    name: String(t.name ?? ""),
+                    resetTime: String(t.resetTime ?? ""),
+                }));
+                if (traders.length > 0) {
+                    this.tradersData[mode] = traders;
+                    fetched = true;
+                    streamDeck.logger.info(`Processed ${mode} trader data (${traders.length} traders)`);
+                }
+                else {
+                    streamDeck.logger.warn(`Empty ${mode} trader data, keeping previous data`);
+                }
+            }
+            else {
+                streamDeck.logger.error(`Invalid ${mode} trader data response`);
+            }
         }
         catch (err) {
             streamDeck.logger.error(`Error fetching ${mode} trader data:`, err);
-            return [];
         }
+        this.scheduleTraderWatch(mode, !fetched);
+        return this.tradersData[mode] ?? [];
     });
     async getTraders(mode) {
-        const cached = this.tradersCache[mode].get();
-        if (cached)
+        const cached = this.tradersData[mode] ?? [];
+        if (cached.length > 0) {
+            if (!this.isTraderWatcherActive(mode) && this.traderActionCounts[mode] > 0) {
+                void this.refreshTraders(mode);
+            }
             return cached;
+        }
+        if (this.traderActionCounts[mode] === 0 || this.isTraderWatcherActive(mode)) {
+            return [];
+        }
         return this.refreshTraders(mode);
-    }
-    refreshTradersAsync(mode) {
-        void this.refreshTraders(mode);
     }
     refreshDatacenters = dedupe(async () => {
         try {
@@ -9862,6 +9973,8 @@ let TarkovTraderRestock = (() => {
         }
         timers = new Map();
         generations = new Map();
+        /** Game mode currently used by each action (for restock watcher registration). */
+        actionModes = new Map();
         async onWillAppear(ev) {
             this._hiddenActions.delete(ev.action.id);
             const raw = ev.payload.settings ?? {};
@@ -9873,6 +9986,9 @@ let TarkovTraderRestock = (() => {
         }
         onWillDisappear(ev) {
             this._hiddenActions.add(ev.action.id);
+            // Tell the API service this action no longer uses its game mode, so it
+            // can stop fetching trader data when nobody needs it anymore.
+            this.setActionMode(ev.action.id, undefined);
         }
         async onDidReceiveSettings(ev) {
             const settings = ev.payload.settings ?? {};
@@ -9883,6 +9999,9 @@ let TarkovTraderRestock = (() => {
             this.stopTimer(actionId);
             const hasMode = isValidGameMode$1(settings.game_mode);
             const hasTrader = !!settings.selectedTrader;
+            // Register/unregister the used game mode with the API service
+            // (restock watcher only fetches modes that are actually displayed).
+            this.setActionMode(actionId, hasMode ? settings.game_mode : undefined);
             if (!hasMode && !hasTrader) {
                 action.setTitle(SELECT_BOTH_TITLE);
                 action.setImage("");
@@ -9942,6 +10061,21 @@ let TarkovTraderRestock = (() => {
             const gen = (this.generations.get(actionId) ?? 0) + 1;
             this.generations.set(actionId, gen);
             return gen;
+        }
+        /** Track which game mode an action uses and (un)register it with the API service. */
+        setActionMode(actionId, mode) {
+            const prev = this.actionModes.get(actionId);
+            if (prev === mode)
+                return;
+            if (prev)
+                tarkovApiService.releaseTraders(prev);
+            if (mode) {
+                tarkovApiService.acquireTraders(mode);
+                this.actionModes.set(actionId, mode);
+            }
+            else {
+                this.actionModes.delete(actionId);
+            }
         }
         async renderTick(action, settings, mode) {
             if (!settings.selectedTrader) {
@@ -10162,7 +10296,7 @@ class SettingsService {
 }
 const settingsService = new SettingsService();
 
-async function handleCommonCommands$1(ev) {
+async function handleCommonCommands(ev) {
     if (typeof ev.payload === "string") {
         if (ev.payload === "openPatreon") {
             streamDeck.system.openUrl(URL_PATREON);
@@ -10429,7 +10563,7 @@ let TarkovCurrentMapInfo = (() => {
             }
         }
         async onSendToPlugin(ev) {
-            const handled = await handleCommonCommands$1(ev);
+            const handled = await handleCommonCommands(ev);
             if (handled)
                 return;
         }
@@ -10727,7 +10861,7 @@ let TarkovCurrentServerInfo = (() => {
             this.stopTimer(ev.action.id);
         }
         async onSendToPlugin(ev) {
-            const handled = await handleCommonCommands$1(ev);
+            const handled = await handleCommonCommands(ev);
             if (handled)
                 return;
             streamDeck.logger.info("raidserver onSendToPlugin (unhandled):", JSON.stringify(ev.payload));
@@ -11173,13 +11307,9 @@ function startBackgroundRefreshers() {
     started = true;
     for (const mode of ALL_GAME_MODES) {
         tarkovApiService.refreshMapsAsync(mode);
-        tarkovApiService.refreshTradersAsync(mode);
     }
     tarkovApiService.refreshLocalMapNamesAsync();
     tarkovApiService.refreshDatacentersAsync();
-    setInterval(() => {
-        tarkovApiService.refreshTradersAsync(currentMode());
-    }, INTERVALS.TRADER_DATA_REFRESH);
     setInterval(() => {
         tarkovApiService.refreshMapsAsync(currentMode());
     }, INTERVALS.MAP_DATA_REFRESH);
@@ -11366,7 +11496,7 @@ let TarkovRaidTimer = (() => {
                 streamDeck.system.openUrl(URL_PATREON);
                 return;
             }
-            const handled = await handleCommonCommands$1(ev);
+            const handled = await handleCommonCommands(ev);
             if (!handled)
                 return;
             const payload = ev.payload;

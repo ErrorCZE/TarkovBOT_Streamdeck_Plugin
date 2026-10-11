@@ -50,10 +50,14 @@ export const INTERVALS = {
     MAP_DISCOVERY: 10_000, // 10 seconds
     TRADER_RESTOCK: 1_000, // 1 second
     MAP_DATA_REFRESH: 2_700_000, // 45 minutes
-    TRADER_DATA_REFRESH: 600_000, // 10 minutes
     DATACENTER_REFRESH: 10_800_000, // 3 hours
     GOONS_AUTO_REFRESH: 300_000, // 5 minutes
     RAID_TIMER: 1_000, // 1 second
+
+    TRADER_RESTOCK_RECHECK_BUFFER_MS: 5_000, // grace period after a resetTime passes before fetching
+    TRADER_RESTOCK_RETRY_BASE_MS: 15_000, // first re-fetch delay while someone is still restocked
+    TRADER_RESTOCK_RETRY_MULTIPLIER: 2, // delay growth per attempt
+    TRADER_RESTOCK_RETRY_MAX_MS: 1_200_000, // growth cap (20 minutes)
 } as const;
 
 export const TARKOV_TIME_MULTIPLIER = 7;

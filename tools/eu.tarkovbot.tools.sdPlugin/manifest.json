@@ -530,7 +530,7 @@
                 {
                         "Name": "Raid Timer",
                         "UUID": "eu.tarkovbot.tools.raidtimer",
-                        "Icon": "assets/actionicon_raidtimer",
+                        "Icon": "assets/actionicon_time",
                         "Tooltip": "Automatically tracks raid time from game logs. Shows MM:SS timer while in raid.",
                         "PropertyInspectorPath": "property-inspector/inspector_raidtimer.html",
                         "Controllers": [
