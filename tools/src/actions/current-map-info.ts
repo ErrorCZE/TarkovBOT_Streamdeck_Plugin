@@ -9,6 +9,8 @@ import {
     WillDisappearEvent,
 } from "@elgato/streamdeck";
 import type { JsonValue, JsonObject } from "@elgato/utils";
+import { existsSync } from "fs";
+import { join } from "path";
 import { DEVICE_PROFILE_MAP, INTERVALS } from "../config/constants";
 import { handleCommonCommands } from "./base/command-handler";
 import { settingsService } from "../services/settings-service";
@@ -17,6 +19,16 @@ import { findCurrentMapFromLogs } from "../services/log-service";
 import type { GameMode, MapInfoSettings } from "../types";
 
 const SELECT_MODE_TITLE = "Select\nGame\nMode";
+const DEFAULT_TITLE = "Get\nCurrent\nMap Info";
+const ERROR_TITLE_DURATION_MS = 4000;
+
+const ERROR_TITLES = {
+    NO_INSTALL_PATH: "EFT path\nnot set",
+    LOGS_FOLDER_MISSING: "Logs\nfolder\nnot found",
+    NO_RAID_FOUND: "No raid\nfound in\ncurrent logs",
+    READ_FAILED: "Failed to\nread logs",
+    PROFILE_SWITCH_FAILED: "Profile\nswitch\nfailed",
+} as const;
 
 const MODE_BORDER_COLOR: Record<GameMode, string> = {
     PVP: "#ffae00",
@@ -49,10 +61,15 @@ function migrateLegacy(settings: MapInfoSettings): MapInfoSettings {
     return migrated;
 }
 
+type LookupResult =
+    | { ok: true; locationId: string }
+    | { ok: false; errorTitle: string };
+
 @action({ UUID: "eu.tarkovbot.tools.mapinfo" })
 export class TarkovCurrentMapInfo extends SingletonAction {
     private autoUpdateTimers = new Map<string, NodeJS.Timeout>();
     private generations = new Map<string, number>();
+    private errorResetTimers = new Map<string, NodeJS.Timeout>();
 
     override async onWillAppear(ev: WillAppearEvent<MapInfoSettings>): Promise<void> {
         const raw = ev.payload.settings ?? ({} as MapInfoSettings);
@@ -69,7 +86,7 @@ export class TarkovCurrentMapInfo extends SingletonAction {
         }
 
         applyModeStrip(ev.action, settings.game_mode);
-        ev.action.setTitle(`Get\nCurrent\nMap Info`);
+        ev.action.setTitle(DEFAULT_TITLE);
     }
 
     override async onKeyDown(ev: KeyDownEvent<MapInfoSettings>): Promise<void> {
@@ -85,15 +102,22 @@ export class TarkovCurrentMapInfo extends SingletonAction {
             global.eftInstallPath || settings.eft_install_path || "";
 
         this.stopAutoUpdate(ev.action.id);
+        this.clearErrorReset(ev.action.id);
 
         const gen = this.bumpGen(ev.action.id);
 
-        stateService.currentLocationId = await findCurrentMapFromLogs(
-            eftInstallPath,
-            settings.game_mode,
-        );
+        const result = await this.lookupCurrentMap(eftInstallPath, settings.game_mode);
 
         if (this.generations.get(ev.action.id) !== gen) return;
+
+        if (!result.ok) {
+            stateService.currentLocationId = null as any;
+            await this.showError(ev.action, result.errorTitle);
+            return;
+        }
+
+        stateService.currentLocationId = result.locationId as any;
+        ev.action.setTitle(DEFAULT_TITLE);
 
         if (settings.map_autoupdate_check) {
             this.autoUpdateTimers.set(
@@ -103,21 +127,82 @@ export class TarkovCurrentMapInfo extends SingletonAction {
                         this.stopAutoUpdate(ev.action.id);
                         return;
                     }
-                    stateService.currentLocationId = await findCurrentMapFromLogs(
+                    const r = await this.lookupCurrentMap(
                         eftInstallPath,
                         settings.game_mode!,
                     );
+                    // Keep the last known map if a refresh fails; don't wipe state on a transient miss.
+                    if (r.ok) {
+                        stateService.currentLocationId = r.locationId as any;
+                    }
                 }, INTERVALS.MAP_DISCOVERY),
             );
         }
 
-        if (stateService.currentLocationId) {
-            streamDeck.profiles.switchToProfile(
+        try {
+            await streamDeck.profiles.switchToProfile(
                 ev.action.device.id,
                 this.getProfilePath(ev.action.device.type),
             );
-        } else {
-            ev.action.setTitle("Not Found");
+        } catch (err) {
+            streamDeck.logger.error("Failed to switch profile", err);
+            await this.showError(ev.action, ERROR_TITLES.PROFILE_SWITCH_FAILED);
+        }
+    }
+
+    /**
+     * Wraps findCurrentMapFromLogs and turns every failure mode into a specific,
+     * human-readable button title.
+     */
+    private async lookupCurrentMap(
+        eftInstallPath: string,
+        mode: GameMode,
+    ): Promise<LookupResult> {
+        if (!eftInstallPath) {
+            return { ok: false, errorTitle: ERROR_TITLES.NO_INSTALL_PATH };
+        }
+
+        // Adjust "Logs" if your log-service resolves a different folder.
+        if (!existsSync(join(eftInstallPath, "Logs"))) {
+            return { ok: false, errorTitle: ERROR_TITLES.LOGS_FOLDER_MISSING };
+        }
+
+        try {
+            const locationId = await findCurrentMapFromLogs(eftInstallPath, mode);
+            if (!locationId) {
+                return { ok: false, errorTitle: ERROR_TITLES.NO_RAID_FOUND };
+            }
+            return { ok: true, locationId };
+        } catch (err) {
+            streamDeck.logger.error("Failed to read EFT logs", err);
+            return { ok: false, errorTitle: ERROR_TITLES.READ_FAILED };
+        }
+    }
+
+    /** Shows an error title + alert flash, then restores the default title. */
+    private async showError(action: any, title: string): Promise<void> {
+        action.setTitle(title);
+        try {
+            await action.showAlert();
+        } catch {
+            /* showAlert can fail if the action disappeared; ignore */
+        }
+
+        this.clearErrorReset(action.id);
+        this.errorResetTimers.set(
+            action.id,
+            setTimeout(() => {
+                this.errorResetTimers.delete(action.id);
+                action.setTitle(DEFAULT_TITLE);
+            }, ERROR_TITLE_DURATION_MS),
+        );
+    }
+
+    private clearErrorReset(actionId: string): void {
+        const t = this.errorResetTimers.get(actionId);
+        if (t) {
+            clearTimeout(t);
+            this.errorResetTimers.delete(actionId);
         }
     }
 
@@ -156,6 +241,7 @@ export class TarkovCurrentMapInfo extends SingletonAction {
 
     override onWillDisappear(ev: WillDisappearEvent): void | Promise<void> {
         this.stopAutoUpdate(ev.action.id);
+        this.clearErrorReset(ev.action.id);
     }
 
     private stopAutoUpdate(actionId: string): void {

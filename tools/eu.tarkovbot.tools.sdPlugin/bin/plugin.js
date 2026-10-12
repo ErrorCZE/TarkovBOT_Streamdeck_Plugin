@@ -13,6 +13,8 @@ import fs, { existsSync, readFileSync } from 'node:fs';
 import path, { join } from 'node:path';
 import { cwd } from 'node:process';
 import { randomUUID } from 'node:crypto';
+import { existsSync as existsSync$1 } from 'fs';
+import { join as join$1 } from 'path';
 import { exec } from 'node:child_process';
 import { promisify } from 'node:util';
 
@@ -4606,11 +4608,24 @@ function requireWebsocket () {
 	      this._redirects = 0;
 
 	      if (protocols === undefined) {
-	        protocols = [];
+	        if (!options || options.protocols === undefined) {
+	          protocols = [];
+	        } else if (Array.isArray(options.protocols)) {
+	          protocols = options.protocols;
+	        } else {
+	          protocols = [options.protocols];
+	        }
 	      } else if (!Array.isArray(protocols)) {
 	        if (typeof protocols === 'object' && protocols !== null) {
 	          options = protocols;
-	          protocols = [];
+
+	          if (options.protocols === undefined) {
+	            protocols = [];
+	          } else if (Array.isArray(options.protocols)) {
+	            protocols = options.protocols;
+	          } else {
+	            protocols = [options.protocols];
+	          }
 	        } else {
 	          protocols = [protocols];
 	        }
@@ -4849,7 +4864,6 @@ function requireWebsocket () {
 	      return;
 	    }
 
-	    this._readyState = WebSocket.CLOSING;
 	    this._sender.close(code, data, !this._isServer, (err) => {
 	      //
 	      // This error is handled by the `'error'` listener on the socket. We only
@@ -4867,6 +4881,7 @@ function requireWebsocket () {
 	      }
 	    });
 
+	    this._readyState = WebSocket.CLOSING;
 	    setCloseTimer(this);
 	  }
 
@@ -5212,6 +5227,7 @@ function requireWebsocket () {
 	    socketPath: undefined,
 	    hostname: undefined,
 	    protocol: undefined,
+	    protocols: undefined,
 	    timeout: undefined,
 	    method: 'GET',
 	    host: undefined,
@@ -9330,7 +9346,7 @@ function formatDatacenter(name) {
         .replace(/ /g, "\n");
 }
 
-const DEFAULT_TITLE$1 = `Get\nGoons\nLocation`;
+const DEFAULT_TITLE$2 = `Get\nGoons\nLocation`;
 const SELECT_MODE_TITLE$2 = "Select\nGame\nMode";
 const ENTER_TOKEN_TITLE = "Enter\nYour\nToken";
 const SELECT_MODE_AND_TOKEN_TITLE = "Select Mode\n& Token";
@@ -9395,7 +9411,7 @@ let TarkovGoonsLocation = (() => {
                 return;
             }
             this.applyModeStrip(action, settings.selectedGoonsSource);
-            action.setTitle(DEFAULT_TITLE$1);
+            action.setTitle(DEFAULT_TITLE$2);
             if (settings.auto_refresh) {
                 this.startAutoRefresh(action, settings);
             }
@@ -9459,7 +9475,7 @@ let TarkovGoonsLocation = (() => {
                 this.autoResetTimers.delete(actionId);
                 if (this.generations.get(actionId) === gen &&
                     !this.autoRefreshTimers.has(actionId)) {
-                    action.setTitle(DEFAULT_TITLE$1);
+                    action.setTitle(DEFAULT_TITLE$2);
                 }
             }, 5_000);
             this.autoResetTimers.set(actionId, reset);
@@ -10452,6 +10468,15 @@ async function findCurrentMapFromLogs(eftPath, mode) {
 }
 
 const SELECT_MODE_TITLE = "Select\nGame\nMode";
+const DEFAULT_TITLE$1 = "Get\nCurrent\nMap Info";
+const ERROR_TITLE_DURATION_MS = 4000;
+const ERROR_TITLES = {
+    NO_INSTALL_PATH: "EFT path\nnot set",
+    LOGS_FOLDER_MISSING: "Logs\nfolder\nnot found",
+    NO_RAID_FOUND: "No raid\nfound in\ncurrent logs",
+    READ_FAILED: "Failed to\nread logs",
+    PROFILE_SWITCH_FAILED: "Profile\nswitch\nfailed",
+};
 const MODE_BORDER_COLOR = {
     PVP: "#ffae00",
     PVE: "#00d9ff",
@@ -10498,6 +10523,7 @@ let TarkovCurrentMapInfo = (() => {
         }
         autoUpdateTimers = new Map();
         generations = new Map();
+        errorResetTimers = new Map();
         async onWillAppear(ev) {
             const raw = ev.payload.settings ?? {};
             let settings = migrateLegacy(raw);
@@ -10511,7 +10537,7 @@ let TarkovCurrentMapInfo = (() => {
                 return;
             }
             applyModeStrip(ev.action, settings.game_mode);
-            ev.action.setTitle(`Get\nCurrent\nMap Info`);
+            ev.action.setTitle(DEFAULT_TITLE$1);
         }
         async onKeyDown(ev) {
             const settings = ev.payload.settings ?? {};
@@ -10522,24 +10548,83 @@ let TarkovCurrentMapInfo = (() => {
             const global = settingsService.load();
             const eftInstallPath = global.eftInstallPath || settings.eft_install_path || "";
             this.stopAutoUpdate(ev.action.id);
+            this.clearErrorReset(ev.action.id);
             const gen = this.bumpGen(ev.action.id);
-            stateService.currentLocationId = await findCurrentMapFromLogs(eftInstallPath, settings.game_mode);
+            const result = await this.lookupCurrentMap(eftInstallPath, settings.game_mode);
             if (this.generations.get(ev.action.id) !== gen)
                 return;
+            if (!result.ok) {
+                stateService.currentLocationId = null;
+                await this.showError(ev.action, result.errorTitle);
+                return;
+            }
+            stateService.currentLocationId = result.locationId;
+            ev.action.setTitle(DEFAULT_TITLE$1);
             if (settings.map_autoupdate_check) {
                 this.autoUpdateTimers.set(ev.action.id, setInterval(async () => {
                     if (this.generations.get(ev.action.id) !== gen) {
                         this.stopAutoUpdate(ev.action.id);
                         return;
                     }
-                    stateService.currentLocationId = await findCurrentMapFromLogs(eftInstallPath, settings.game_mode);
+                    const r = await this.lookupCurrentMap(eftInstallPath, settings.game_mode);
+                    // Keep the last known map if a refresh fails; don't wipe state on a transient miss.
+                    if (r.ok) {
+                        stateService.currentLocationId = r.locationId;
+                    }
                 }, INTERVALS.MAP_DISCOVERY));
             }
-            if (stateService.currentLocationId) {
-                streamDeck.profiles.switchToProfile(ev.action.device.id, this.getProfilePath(ev.action.device.type));
+            try {
+                await streamDeck.profiles.switchToProfile(ev.action.device.id, this.getProfilePath(ev.action.device.type));
             }
-            else {
-                ev.action.setTitle("Not Found");
+            catch (err) {
+                streamDeck.logger.error("Failed to switch profile", err);
+                await this.showError(ev.action, ERROR_TITLES.PROFILE_SWITCH_FAILED);
+            }
+        }
+        /**
+         * Wraps findCurrentMapFromLogs and turns every failure mode into a specific,
+         * human-readable button title.
+         */
+        async lookupCurrentMap(eftInstallPath, mode) {
+            if (!eftInstallPath) {
+                return { ok: false, errorTitle: ERROR_TITLES.NO_INSTALL_PATH };
+            }
+            // Adjust "Logs" if your log-service resolves a different folder.
+            if (!existsSync$1(join$1(eftInstallPath, "Logs"))) {
+                return { ok: false, errorTitle: ERROR_TITLES.LOGS_FOLDER_MISSING };
+            }
+            try {
+                const locationId = await findCurrentMapFromLogs(eftInstallPath, mode);
+                if (!locationId) {
+                    return { ok: false, errorTitle: ERROR_TITLES.NO_RAID_FOUND };
+                }
+                return { ok: true, locationId };
+            }
+            catch (err) {
+                streamDeck.logger.error("Failed to read EFT logs", err);
+                return { ok: false, errorTitle: ERROR_TITLES.READ_FAILED };
+            }
+        }
+        /** Shows an error title + alert flash, then restores the default title. */
+        async showError(action, title) {
+            action.setTitle(title);
+            try {
+                await action.showAlert();
+            }
+            catch {
+                /* showAlert can fail if the action disappeared; ignore */
+            }
+            this.clearErrorReset(action.id);
+            this.errorResetTimers.set(action.id, setTimeout(() => {
+                this.errorResetTimers.delete(action.id);
+                action.setTitle(DEFAULT_TITLE$1);
+            }, ERROR_TITLE_DURATION_MS));
+        }
+        clearErrorReset(actionId) {
+            const t = this.errorResetTimers.get(actionId);
+            if (t) {
+                clearTimeout(t);
+                this.errorResetTimers.delete(actionId);
             }
         }
         getProfilePath(deviceType) {
@@ -10569,6 +10654,7 @@ let TarkovCurrentMapInfo = (() => {
         }
         onWillDisappear(ev) {
             this.stopAutoUpdate(ev.action.id);
+            this.clearErrorReset(ev.action.id);
         }
         stopAutoUpdate(actionId) {
             const t = this.autoUpdateTimers.get(actionId);
