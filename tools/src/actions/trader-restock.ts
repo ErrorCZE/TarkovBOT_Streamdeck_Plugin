@@ -12,6 +12,7 @@ import fs from "node:fs";
 import type { JsonValue, JsonObject } from "@elgato/utils";
 import { INTERVALS, URL_PATREON } from "../config/constants";
 import { tarkovApiService } from "../services/api-service";
+import { diag, describeFsError } from "../services/diagnostics-service";
 import type { GameMode, TraderData, TraderRestockSettings } from "../types";
 import { formatCountdown } from "../utils/time-format";
 
@@ -94,7 +95,11 @@ export class TarkovTraderRestock extends SingletonAction {
             action.setTitle(SELECT_MODE_TITLE);
             try {
                 this.applyTraderImage(action, settings.selectedTrader, settings.game_mode);
-            } catch {
+            } catch (err) {
+                diag.warn("ACTION", "Failed to apply trader image on the action", {
+                    trader: settings.selectedTrader,
+                    err: describeFsError(err),
+                });
                 action.setImage("");
             }
             return;
@@ -107,7 +112,11 @@ export class TarkovTraderRestock extends SingletonAction {
 
         try {
             this.applyTraderImage(action, settings.selectedTrader, settings.game_mode);
-        } catch {
+        } catch (err) {
+            diag.warn("ACTION", "Failed to apply trader image on the action", {
+                trader: settings.selectedTrader,
+                err: describeFsError(err),
+            });
             action.setImage("");
         }
 
@@ -217,6 +226,10 @@ export class TarkovTraderRestock extends SingletonAction {
 
         const imagePath = path.join(process.cwd(), "assets", `${traderName}.png`);
         if (!fs.existsSync(imagePath)) {
+            diag.warn("FS", "Trader image asset not found - button will have no image", {
+                trader: traderName,
+                expectedPath: imagePath,
+            });
             action.setImage("");
             return;
         }
@@ -277,6 +290,9 @@ export class TarkovTraderRestock extends SingletonAction {
         streamDeck.logger.info(`[RESTOCK SOUND] Attempting to play: ${soundFile}`);
 
         if (!fs.existsSync(soundFile)) {
+            diag.warn("FS", "Restock sound file not found - no sound will play", {
+                soundFile,
+            });
             streamDeck.logger.warn(`[RESTOCK SOUND] File not found: ${soundFile}`);
             return;
         }
@@ -289,6 +305,10 @@ export class TarkovTraderRestock extends SingletonAction {
             );
             streamDeck.logger.info(`[RESTOCK SOUND] Playback started`);
         } catch (err: any) {
+            diag.warn("ACTION", "Restock sound playback failed", {
+                soundFile,
+                err: err?.message ?? String(err),
+            });
             streamDeck.logger.error(`[RESTOCK SOUND] Failed: ${err.message}`);
         }
     }

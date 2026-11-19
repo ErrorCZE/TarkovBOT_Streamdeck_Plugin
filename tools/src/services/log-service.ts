@@ -7,6 +7,7 @@ import {
     LOG_REGEX_SCENE_PRESET,
     LOG_REGEX_SID,
 } from "../config/constants";
+import { diag, describeFsError } from "./diagnostics-service";
 import type { GameMode, LocalMapEntry } from "../types";
 import { tarkovApiService } from "./api-service";
 import { stateService } from "./state-service";
@@ -30,6 +31,10 @@ interface DirentWithTimestamp {
     timestamp: number;
 }
 
+/**
+ * Reads `Logs` directory and returns log_ folders sorted by timestamp.
+ * Throws the original fs error so callers can classify it.
+ */
 async function listLogFolders(eftPath: string): Promise<DirentWithTimestamp[]> {
     const logsPath = `${eftPath}\\Logs`;
     const entries = await fs.promises.readdir(logsPath, { withFileTypes: true });
@@ -50,16 +55,71 @@ async function listAppLogFiles(folderPath: string): Promise<string[]> {
 }
 
 export async function getLatestLogFile(eftPath: string): Promise<string | null> {
-    if (!eftPath) return null;
+    if (!eftPath) {
+        // Polled every second by the raid watcher - throttle to avoid log flooding.
+        diag.throttled(
+            "warn",
+            "no-eft-path",
+            "PATH",
+            "No EFT path configured - cannot look up game logs. Set the path in the property inspector.",
+        );
+        return null;
+    }
+
     try {
         const folders = await listLogFolders(eftPath);
-        if (folders.length === 0) return null;
+        if (folders.length === 0) {
+            diag.throttled(
+                "debug",
+                `no-log-folders:${eftPath}`,
+                "FS",
+                "Logs folder exists but contains no log_* folders yet (game not started since it was created)",
+                { logsPath: `${eftPath}\\Logs` },
+            );
+            return null;
+        }
 
         const latestFolder = `${eftPath}\\Logs\\${folders[0].name}`;
         const files = await listAppLogFiles(latestFolder);
-        if (files.length === 0) return null;
+        if (files.length === 0) {
+            diag.throttled(
+                "warn",
+                `no-app-log:${latestFolder}`,
+                "FS",
+                "Latest log folder contains no application log file",
+                { latestFolder, fragment: LOG_APP_FILE_FRAGMENT },
+            );
+            return null;
+        }
         return `${latestFolder}\\${files[0]}`;
-    } catch {
+    } catch (err) {
+        const logsPath = `${eftPath}\\Logs`;
+        const code = (err as any)?.code;
+        if (code === "ENOENT") {
+            diag.throttled(
+                "warn",
+                `logs-missing:${eftPath}`,
+                "PATH",
+                "Logs folder not found - the configured path is wrong or has never been used by the game",
+                { logsPath, err: describeFsError(err) },
+            );
+        } else if (code === "EACCES" || code === "EPERM") {
+            diag.throttled(
+                "error",
+                `logs-noaccess:${eftPath}`,
+                "FS",
+                "No read access to the Logs folder",
+                { logsPath, err: describeFsError(err) },
+            );
+        } else {
+            diag.throttled(
+                "error",
+                `logs-listing:${eftPath}`,
+                "FS",
+                "Failed to list the Logs folder",
+                { logsPath, err: describeFsError(err) },
+            );
+        }
         return null;
     }
 }
@@ -90,11 +150,27 @@ export async function findServerFromLogs(eftPath: string): Promise<ServerInfo | 
 
         const lines = await readLinesReversed(latestFile);
         const sidPrefix = findFirstMatch(lines, LOG_REGEX_SID);
-        if (!sidPrefix) return null;
+        if (!sidPrefix) {
+            diag.throttled(
+                "debug",
+                `no-sid:${latestFile}`,
+                "FS",
+                "No server id (Sid) found in the latest log - probably not connected / not in raid yet",
+                { logFile: latestFile },
+            );
+            return null;
+        }
 
         await tarkovApiService.getDatacenters();
         return { sid: sidPrefix, datacenter: stateService.resolveDatacenter(sidPrefix) };
     } catch (err) {
+        diag.throttled(
+            "error",
+            `server-read:${eftPath}`,
+            "FS",
+            "Failed to read the EFT log file for server lookup",
+            { eftPath, err: describeFsError(err) },
+        );
         streamDeck.logger.error("Error finding server from logs:", err);
         return null;
     }
@@ -113,7 +189,16 @@ export async function findCurrentMapFromLogs(
 
         if (mode === "PVE" || mode === "SEASON") {
             const sceneName = findFirstMatch(lines, LOG_REGEX_SCENE_PRESET);
-            if (!sceneName) return null;
+            if (!sceneName) {
+                diag.throttled(
+                    "debug",
+                    `no-scene:${latestFile}`,
+                    "FS",
+                    "No scene preset found in the latest log - probably not in raid",
+                    { logFile: latestFile, mode },
+                );
+                return null;
+            }
 
             const normalised = sceneName.toLowerCase();
             const localMapNames = await tarkovApiService.getLocalMapNames();
@@ -123,12 +208,36 @@ export async function findCurrentMapFromLogs(
                     return entry.dataID;
                 }
             }
+            diag.throttled(
+                "info",
+                `unknown-scene:${normalised}`,
+                "FS",
+                "Scene name from log is not in the known map list - returning it raw",
+                { sceneName: normalised, mode },
+            );
             return normalised;
         }
 
         const location = findFirstMatch(lines, LOG_REGEX_LOCATION);
-        return location ?? null;
+        if (!location) {
+            diag.throttled(
+                "debug",
+                `no-location:${latestFile}`,
+                "FS",
+                "No location found in the latest log - probably not in raid",
+                { logFile: latestFile, mode },
+            );
+            return null;
+        }
+        return location;
     } catch (err) {
+        diag.throttled(
+            "error",
+            `map-read:${eftPath}:${mode}`,
+            "FS",
+            "Failed to read the EFT log file for map lookup",
+            { eftPath, mode, err: describeFsError(err) },
+        );
         streamDeck.logger.error("Error reading logs:", err);
         return null;
     }

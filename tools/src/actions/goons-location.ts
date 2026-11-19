@@ -9,6 +9,7 @@ import {
 } from "@elgato/streamdeck";
 import type { JsonValue, JsonObject } from "@elgato/utils";
 import { ENDPOINTS, INTERVALS, URL_PATREON, URL_WEBSITE } from "../config/constants";
+import { diag, describeFsError } from "../services/diagnostics-service";
 import type { GoonsLocationSettings, GoonsModeReport, GoonsReport, GoonsSource } from "../types";
 import { formatElapsed } from "../utils/time-format";
 
@@ -109,11 +110,18 @@ export class TarkovGoonsLocation extends SingletonAction {
             if (this.generations.get(actionId) !== gen) return;
 
             if (response.status === 401) {
+                diag.warn("API", "Goons request rejected: invalid auth token (HTTP 401)", {
+                    endpoint: ENDPOINTS.GOONS_LOCATION,
+                });
                 ev.action.setTitle("Invalid\nToken");
                 this.scheduleReset(actionId, gen, ev.action);
                 return;
             }
             if (response.status !== 200) {
+                diag.warn("API", "Goons request returned unexpected HTTP status", {
+                    endpoint: ENDPOINTS.GOONS_LOCATION,
+                    status: response.status,
+                });
                 ev.action.setTitle("Something\nWent\nWrong.");
                 this.scheduleReset(actionId, gen, ev.action);
                 return;
@@ -134,7 +142,14 @@ export class TarkovGoonsLocation extends SingletonAction {
             if (!this.autoRefreshTimers.has(actionId)) {
                 this.scheduleReset(actionId, gen, ev.action);
             }
-        } catch {
+        } catch (err) {
+            diag.throttled(
+                "error",
+                "goons-fetch-manual",
+                "API",
+                "Goons report fetch failed (manual refresh)",
+                { endpoint: ENDPOINTS.GOONS_LOCATION, err: describeFsError(err) },
+            );
             if (this.generations.get(actionId) === gen) {
                 ev.action.setTitle("Something\nWent\nWrong.");
             }
@@ -206,8 +221,15 @@ export class TarkovGoonsLocation extends SingletonAction {
 
             const elapsedMs = Date.now() - new Date(report.reported).getTime();
             action.setTitle(`${report.location}\n${formatElapsed(elapsedMs)}`);
-        } catch {
-            // silent — keep last title
+        } catch (err) {
+            // silent - keep last title, but log the reason
+            diag.throttled(
+                "error",
+                "goons-fetch",
+                "API",
+                "Goons report fetch failed - keeping last known title",
+                { err: describeFsError(err) },
+            );
         }
     }
 

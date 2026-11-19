@@ -1,6 +1,7 @@
 import { exec } from "node:child_process";
 import { promisify } from "node:util";
 import fs from "node:fs";
+import { diag, describeFsError } from "./diagnostics-service";
 import type { PathDetectionResult } from "../types";
 
 const execAsync = promisify(exec);
@@ -13,34 +14,60 @@ const REGISTRY_PATHS = [
 const REG_INSTALL_LOCATION = /InstallLocation\s+REG_SZ\s+(.+)/i;
 
 export async function detectEftPath(): Promise<PathDetectionResult> {
+    diag.info("PATH", "EFT path auto-detection started (checking registry keys)");
+
     for (const regPath of REGISTRY_PATHS) {
+        let stdout: string;
         try {
-            const { stdout } = await execAsync(`reg query "${regPath}" /v InstallLocation`, {
+            const result = await execAsync(`reg query "${regPath}" /v InstallLocation`, {
                 encoding: "utf8",
             });
-
-            const match = stdout.match(REG_INSTALL_LOCATION);
-            if (!match?.[1]) continue;
-
-            const installPath = match[1].trim();
-            const candidate = resolveLogsRoot(installPath);
-            if (candidate) {
-                return { success: true, path: candidate };
-            }
-        } catch {
+            stdout = result.stdout;
+        } catch (err: any) {
+            // reg.exe exits non-zero when the key does not exist - normal for one of the two keys.
+            diag.info("PATH", `Registry key not usable (skipping)`, {
+                regPath,
+                reason: err?.code ? `exit code ${err.code}` : describeFsError(err),
+            });
             continue;
         }
+
+        const match = stdout.match(REG_INSTALL_LOCATION);
+        if (!match?.[1]) {
+            diag.warn("PATH", "Registry key exists but InstallLocation value is missing or empty", {
+                regPath,
+            });
+            continue;
+        }
+
+        const installPath = match[1].trim();
+
+        let logsExists: boolean;
+        try {
+            logsExists = fs.existsSync(`${installPath}\\Logs`);
+        } catch (err) {
+            diag.warn("PATH", "Cannot check the detected install path", {
+                installPath,
+                err: describeFsError(err),
+            });
+            continue;
+        }
+
+        if (logsExists) {
+            diag.info("PATH", "EFT path auto-detected from registry", { installPath });
+            return { success: true, path: installPath };
+        }
+
+        diag.warn("PATH", "Detected install path has no Logs folder (game never run from here?)", {
+            installPath,
+            checkedPath: `${installPath}\\Logs`,
+        });
     }
 
-    return {
-        success: false,
-        error: "EFT installation not found. Please enter the path manually.",
-    };
-}
-
-function resolveLogsRoot(installPath: string): string | null {
-    if (fs.existsSync(`${installPath}\\Logs`)) {
-        return installPath;
-    }
-    return null;
+    const error = "EFT installation not found. Please enter the path manually.";
+    diag.warn("PATH", `EFT path auto-detection failed - ${error}`, {
+        triedRegistryKeys: REGISTRY_PATHS.length,
+        hint: "Set the path manually in the property inspector; the problem will be logged with details.",
+    });
+    return { success: false, error };
 }

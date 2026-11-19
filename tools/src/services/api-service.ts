@@ -17,6 +17,7 @@ import type {
     TraderData,
     TradersApiResponse,
 } from "../types";
+import { diag, describeFsError } from "./diagnostics-service";
 import { stateService } from "./state-service";
 
 function isMapsApiResponse(data: unknown): data is MapsApiResponse {
@@ -138,7 +139,13 @@ class TarkovApiService {
         try {
             const res = await fetch(url);
             const json = await res.json();
-            if (!isMapsApiResponse(json)) return [];
+            if (!isMapsApiResponse(json)) {
+                diag.warn("API", "Maps API returned an unexpected response format - no map data stored", {
+                    endpoint: url,
+                    gameMode: mode,
+                });
+                return [];
+            }
 
             const consolidated = json.maps.map((m) => ({
                 ...m,
@@ -150,6 +157,13 @@ class TarkovApiService {
             streamDeck.logger.info(`Processed ${mode} Map Data (${consolidated.length} maps)`);
             return consolidated;
         } catch (err) {
+            diag.throttled(
+                "error",
+                `maps-fetch:${mode}`,
+                "API",
+                "Fetching map data failed (offline, DNS, or API down?)",
+                { endpoint: url, gameMode: mode, err: describeFsError(err) },
+            );
             streamDeck.logger.error(`Error fetching ${mode} maps:`, err);
             return [];
         }
@@ -292,12 +306,23 @@ class TarkovApiService {
                     fetched = true;
                     streamDeck.logger.info(`Processed ${mode} trader data (${traders.length} traders)`);
                 } else {
+                    diag.warn("API", `Empty ${mode} trader data - keeping previous data`, {
+                        endpoint: url,
+                    });
                     streamDeck.logger.warn(`Empty ${mode} trader data, keeping previous data`);
                 }
             } else {
+                diag.warn("API", `Invalid ${mode} trader data response format`, { endpoint: url });
                 streamDeck.logger.error(`Invalid ${mode} trader data response`);
             }
         } catch (err) {
+            diag.throttled(
+                "error",
+                `traders-fetch:${mode}`,
+                "API",
+                "Fetching trader data failed (offline, DNS, or API down?)",
+                { endpoint: url, gameMode: mode, err: describeFsError(err) },
+            );
             streamDeck.logger.error(`Error fetching ${mode} trader data:`, err);
         }
         this.scheduleTraderWatch(mode, !fetched);
@@ -330,7 +355,17 @@ class TarkovApiService {
                 streamDeck.logger.info("Datacenter list updated.");
                 return data;
             }
+            diag.warn("API", "Datacenter response has an unexpected format", {
+                endpoint: ENDPOINTS.DATACENTERS,
+            });
         } catch (err) {
+            diag.throttled(
+                "error",
+                "datacenters-fetch",
+                "API",
+                "Fetching datacenter list failed (offline, DNS, or API down?)",
+                { endpoint: ENDPOINTS.DATACENTERS, err: describeFsError(err) },
+            );
             streamDeck.logger.error("Error fetching datacenter data:", err);
         }
         return {};
@@ -356,7 +391,17 @@ class TarkovApiService {
                 streamDeck.logger.info("Local map names loaded successfully");
                 return json;
             }
+            diag.warn("API", "Local map names response has an unexpected format", {
+                endpoint: ENDPOINTS.LOCAL_MAP_NAMES,
+            });
         } catch (err) {
+            diag.throttled(
+                "error",
+                "local-map-names-fetch",
+                "API",
+                "Fetching local map names failed (offline, DNS, or API down?)",
+                { endpoint: ENDPOINTS.LOCAL_MAP_NAMES, err: describeFsError(err) },
+            );
             streamDeck.logger.error("Error fetching local map names:", err);
         }
         return [];
@@ -379,15 +424,35 @@ class TarkovApiService {
         try {
             let response = await fetch(primary);
             if (!response.ok) {
+                diag.warn("API", "Boss image not available at primary URL, trying fallback", {
+                    bossId,
+                    url: primary,
+                    status: response.status,
+                });
                 response = await fetch(BOSS_IMAGE_FALLBACK);
             }
-            if (!response.ok) return null;
+            if (!response.ok) {
+                diag.warn("API", "Boss image unavailable - primary and fallback URL both failed", {
+                    bossId,
+                    primaryUrl: primary,
+                    fallbackUrl: BOSS_IMAGE_FALLBACK,
+                    fallbackStatus: response.status,
+                });
+                return null;
+            }
 
             const buf = await response.arrayBuffer();
             const dataUrl = `data:image/webp;base64,${Buffer.from(buf).toString("base64")}`;
             this.bossImageCache.set(bossId, dataUrl);
             return dataUrl;
         } catch (err) {
+            diag.throttled(
+                "error",
+                `boss-image:${bossId}`,
+                "API",
+                "Failed to fetch boss image",
+                { bossId, url: primary, err: describeFsError(err) },
+            );
             streamDeck.logger.error(`Failed to fetch boss image for ${bossId}:`, err);
             return null;
         }

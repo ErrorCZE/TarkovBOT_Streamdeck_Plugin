@@ -1,3 +1,5 @@
+import fs from "node:fs";
+import path from "node:path";
 import streamDeck from "@elgato/streamdeck";
 
 import { TarkovTime } from "./actions/tarkov-time";
@@ -13,6 +15,14 @@ import { TarkovCurrentServerInfo } from "./actions/current-server";
 import { createAllBossInstances } from "./actions/current-map-bosses";
 import { startBackgroundRefreshers } from "./services/background-refresh";
 import { TarkovRaidTimer } from "./actions/raid-timer";
+import { SETTINGS_FILE_PATH } from "./config/constants";
+import { diag, DIAG_FILE_PATH, describeFsError, validateEftPath } from "./services/diagnostics-service";
+import { settingsService } from "./services/settings-service";
+
+// Log everything that goes wrong globally (crashes, dangling promises).
+diag.registerGlobalErrorHandlers();
+
+logStartupBanner();
 
 startBackgroundRefreshers();
 
@@ -36,3 +46,51 @@ streamDeck.actions.registerAction(new TarkovCurrentServerInfo());
 streamDeck.actions.registerAction(new TarkovRaidTimer());
 
 streamDeck.connect();
+
+/** Logs environment info + validity of the saved EFT path once at startup. */
+function logStartupBanner(): void {
+    const manifest = readManifest();
+    diag.info("GENERAL", "Plugin starting", {
+        plugin: manifest?.Name ?? "unknown",
+        version: manifest?.Version ?? "unknown",
+        platform: `${process.platform} ${process.arch}`,
+        nodeVersion: process.version,
+        workingDirectory: process.cwd(),
+        settingsFile: SETTINGS_FILE_PATH,
+        diagnosticsFile: DIAG_FILE_PATH,
+    });
+
+    const settings = settingsService.load();
+    if (!settings.eftInstallPath) {
+        diag.warn(
+            "PATH",
+            "No EFT path configured at startup - set it in the property inspector or use auto-detect",
+        );
+        return;
+    }
+
+    const validation = validateEftPath(settings.eftInstallPath);
+    if (validation.valid) {
+        diag.info("PATH", "Saved EFT path validated successfully", { path: validation.path });
+    } else {
+        diag.warn("PATH", "Saved EFT path has problems - related actions will not work until fixed", {
+            path: validation.path,
+            problems: validation.problems,
+        });
+    }
+}
+
+function readManifest(): { Name?: string; Version?: string } | null {
+    // cwd is normally the plugin `bin` folder; the manifest lives one level up.
+    for (const candidate of ["../manifest.json", "manifest.json"]) {
+        try {
+            const raw = fs.readFileSync(path.join(process.cwd(), candidate), "utf8");
+            return JSON.parse(raw) as { Name?: string; Version?: string };
+        } catch (err) {
+            diag.debug("GENERAL", `Cannot read manifest at ${candidate}`, {
+                err: describeFsError(err),
+            });
+        }
+    }
+    return null;
+}

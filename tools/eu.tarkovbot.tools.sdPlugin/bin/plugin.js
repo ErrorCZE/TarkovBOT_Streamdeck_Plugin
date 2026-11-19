@@ -1,3 +1,5 @@
+import fs, { existsSync, readFileSync } from 'node:fs';
+import path, { join } from 'node:path';
 import require$$0$3 from 'events';
 import require$$1$1 from 'https';
 import require$$2$1 from 'http';
@@ -9,8 +11,6 @@ import require$$7 from 'url';
 import require$$0 from 'zlib';
 import require$$0$1 from 'buffer';
 import require$$2 from 'util';
-import fs, { existsSync, readFileSync } from 'node:fs';
-import path, { join } from 'node:path';
 import { cwd } from 'node:process';
 import { randomUUID } from 'node:crypto';
 import { existsSync as existsSync$1 } from 'fs';
@@ -9319,6 +9319,236 @@ let TarkovTime = (() => {
     return _classThis;
 })();
 
+const DIAG_FILE_PATH = path.join(process.cwd(), "diagnostics.log");
+const DIAG_OLD_FILE_PATH = path.join(process.cwd(), "diagnostics.old.log");
+const MAX_LOG_SIZE = 512 * 1024; // rotate after 512 KB
+const DEFAULT_THROTTLE_MS = 10 * 60 * 1000; // repeated errors: log again after 10 min
+/** Human-readable explanation for common Node.js filesystem error codes. */
+const FS_ERROR_HINTS = {
+    ENOENT: "path does not exist (wrong path, typo, or folder was moved/renamed)",
+    EACCES: "access denied (no read permission on this file/folder)",
+    EPERM: "operation not permitted (blocked by permissions or antivirus)",
+    EISDIR: "path is a folder, but a file was expected",
+    ENOTDIR: "part of the path is a file, not a folder (broken path)",
+    EBUSY: "file/folder is locked by another process (probably the game)",
+    EMFILE: "too many open files (system limit reached)",
+    ENFILE: "system-wide file table is full",
+    EROFS: "read-only file system, writing is not possible",
+};
+/** Turns a filesystem error into a short human-readable string, e.g. `ENOENT: path does not exist`. */
+function describeFsError(err) {
+    const code = err?.code;
+    if (code && FS_ERROR_HINTS[code])
+        return `${code}: ${FS_ERROR_HINTS[code]}`;
+    if (err instanceof Error) {
+        const msg = code ? `${code}: ${err.message}` : err.message;
+        return err?.cause ? `${msg} (cause: ${String(err.cause)})` : msg;
+    }
+    return String(err);
+}
+/**
+ * Cleans up a manually entered EFT path so it matches what the plugin expects:
+ *  - trims whitespace
+ *  - strips wrapping quotes (Explorer "Copy as path" copies `"C:\...\EFT"`)
+ *  - unifies forward slashes to backslashes and drops trailing separators
+ *  - drops a trailing `\Logs` segment (the plugin appends `\Logs` itself)
+ */
+function normalizeEftPath(input) {
+    let p = (input ?? "").trim();
+    if (!p)
+        return "";
+    if ((p.startsWith('"') && p.endsWith('"') && p.length >= 2) ||
+        (p.startsWith("'") && p.endsWith("'") && p.length >= 2)) {
+        p = p.slice(1, -1).trim();
+    }
+    p = p.replace(/\//g, "\\").replace(/\\+$/, "");
+    const logsSuffix = p.match(/^(.*)\\Logs$/i);
+    if (logsSuffix && logsSuffix[1]) {
+        return logsSuffix[1].trim();
+    }
+    return p;
+}
+/**
+ * Full validation of a configured (usually manually entered) EFT install path:
+ * does it exist, is it a folder, does it contain `Logs`, can we actually read it?
+ */
+function validateEftPath(eftPath) {
+    const p = (eftPath ?? "").trim();
+    const problems = [];
+    if (!p) {
+        problems.push("path is empty / not set");
+        return { path: p, valid: false, problems };
+    }
+    if (!fs.existsSync(p)) {
+        problems.push("path does not exist (typo, wrong drive letter, or folder moved?)");
+        return { path: p, valid: false, problems };
+    }
+    let st;
+    try {
+        st = fs.statSync(p);
+    }
+    catch (err) {
+        problems.push(`cannot inspect path (${describeFsError(err)})`);
+        return { path: p, valid: false, problems };
+    }
+    if (!st.isDirectory()) {
+        problems.push("path points to a file, not to a folder");
+        return { path: p, valid: false, problems };
+    }
+    const logsDir = path.join(p, "Logs");
+    if (!fs.existsSync(logsDir)) {
+        problems.push(`Logs folder not found inside (expected: ${logsDir})`);
+        return { path: p, valid: false, problems };
+    }
+    // Read-permission checks: access() + a real readdir() as the authoritative test.
+    try {
+        fs.accessSync(p, fs.constants.R_OK);
+    }
+    catch (err) {
+        problems.push(`no read permission for the path (${describeFsError(err)})`);
+    }
+    try {
+        fs.accessSync(logsDir, fs.constants.R_OK);
+    }
+    catch (err) {
+        problems.push(`no read permission for the Logs folder (${describeFsError(err)})`);
+    }
+    try {
+        const entries = fs.readdirSync(logsDir);
+        const logFolders = entries.filter((e) => e.startsWith("log_"));
+        if (logFolders.length === 0) {
+            problems.push("Logs folder exists but contains no log_* folders yet (game has not run since the folder was created)");
+        }
+    }
+    catch (err) {
+        problems.push(`cannot list the Logs folder (${describeFsError(err)})`);
+    }
+    return { path: p, valid: problems.length === 0, problems };
+}
+class DiagnosticsLogger {
+    throttleState = new Map();
+    /** Set to true when writing the file keeps failing; prevents endless retry spam. */
+    fileDisabled = false;
+    debug(category, message, details) {
+        this.log("debug", category, message, details);
+    }
+    info(category, message, details) {
+        this.log("info", category, message, details);
+    }
+    warn(category, message, details) {
+        this.log("warn", category, message, details);
+    }
+    error(category, message, details) {
+        this.log("error", category, message, details);
+    }
+    /**
+     * Logs with rate limiting: the first occurrence is written immediately,
+     * repeats within the throttle window are counted silently, and once the
+     * window expires the message is logged again including the suppressed count.
+     * Use this inside poll loops / timers so a broken path does not flood the log.
+     */
+    throttled(level, key, category, message, details, throttleMs = DEFAULT_THROTTLE_MS) {
+        try {
+            const now = Date.now();
+            const state = this.throttleState.get(key);
+            if (state && now - state.lastAt < throttleMs) {
+                state.suppressed += 1;
+                return;
+            }
+            const suppressed = state?.suppressed ?? 0;
+            this.throttleState.set(key, { lastAt: now, suppressed: 0 });
+            const enriched = suppressed > 0 ? { ...details, suppressedRepeats: suppressed } : details;
+            this.log(level, category, message, enriched);
+        }
+        catch {
+            /* never let diagnostics itself break the plugin */
+        }
+    }
+    log(level, category, message, details) {
+        const entry = {
+            ts: new Date().toISOString(),
+            level,
+            category,
+            message,
+        };
+        if (details) {
+            for (const [k, v] of Object.entries(details)) {
+                entry[k] = v instanceof Error ? describeFsError(v) : v;
+            }
+        }
+        // Always mirror warnings/errors into the Stream Deck log.
+        if (level === "warn" || level === "error") {
+            try {
+                const line = `[DIAG][${category}] ${message}${details ? ` | ${JSON.stringify(compact(details))}` : ""}`;
+                if (level === "error")
+                    streamDeck.logger.error(line);
+                else
+                    streamDeck.logger.warn(line);
+            }
+            catch {
+                /* streamDeck logger unavailable */
+            }
+        }
+        this.writeLine(JSON.stringify(entry));
+    }
+    writeLine(line) {
+        if (this.fileDisabled)
+            return;
+        try {
+            this.rotateIfNeeded();
+            fs.appendFileSync(DIAG_FILE_PATH, line + "\n", "utf8");
+        }
+        catch {
+            // Disk/permission problems with the log file itself must not break the plugin.
+            // Give up on the file log after the first failure and rely on the SD log.
+            this.fileDisabled = true;
+            try {
+                streamDeck.logger.error(`[DIAG] Cannot write ${DIAG_FILE_PATH}: logging to file disabled`);
+            }
+            catch {
+                /* ignore */
+            }
+        }
+    }
+    rotateIfNeeded() {
+        try {
+            const st = fs.statSync(DIAG_FILE_PATH);
+            if (st.size < MAX_LOG_SIZE)
+                return;
+            try {
+                fs.unlinkSync(DIAG_OLD_FILE_PATH);
+            }
+            catch {
+                /* no old file yet */
+            }
+            fs.renameSync(DIAG_FILE_PATH, DIAG_OLD_FILE_PATH);
+        }
+        catch {
+            /* file does not exist yet */
+        }
+    }
+    /** Logs uncaught exceptions / unhandled rejections instead of dying silently. */
+    registerGlobalErrorHandlers() {
+        process.on("uncaughtException", (err) => {
+            this.log("error", "GENERAL", "Uncaught exception", { err: describeFsError(err), stack: err?.stack });
+        });
+        process.on("unhandledRejection", (reason) => {
+            this.log("error", "GENERAL", "Unhandled promise rejection", {
+                err: reason instanceof Error ? describeFsError(reason) : String(reason),
+                stack: reason instanceof Error ? reason.stack : undefined,
+            });
+        });
+    }
+}
+function compact(details) {
+    const out = {};
+    for (const [k, v] of Object.entries(details)) {
+        out[k] = v instanceof Error ? describeFsError(v) : v;
+    }
+    return out;
+}
+const diag = new DiagnosticsLogger();
+
 function formatCountdown(ms) {
     const totalSeconds = Math.max(0, Math.floor(ms / 1000));
     const hours = String(Math.floor(totalSeconds / 3600)).padStart(2, "0");
@@ -9437,11 +9667,18 @@ let TarkovGoonsLocation = (() => {
                 if (this.generations.get(actionId) !== gen)
                     return;
                 if (response.status === 401) {
+                    diag.warn("API", "Goons request rejected: invalid auth token (HTTP 401)", {
+                        endpoint: ENDPOINTS.GOONS_LOCATION,
+                    });
                     ev.action.setTitle("Invalid\nToken");
                     this.scheduleReset(actionId, gen, ev.action);
                     return;
                 }
                 if (response.status !== 200) {
+                    diag.warn("API", "Goons request returned unexpected HTTP status", {
+                        endpoint: ENDPOINTS.GOONS_LOCATION,
+                        status: response.status,
+                    });
                     ev.action.setTitle("Something\nWent\nWrong.");
                     this.scheduleReset(actionId, gen, ev.action);
                     return;
@@ -9460,7 +9697,8 @@ let TarkovGoonsLocation = (() => {
                     this.scheduleReset(actionId, gen, ev.action);
                 }
             }
-            catch {
+            catch (err) {
+                diag.throttled("error", "goons-fetch-manual", "API", "Goons report fetch failed (manual refresh)", { endpoint: ENDPOINTS.GOONS_LOCATION, err: describeFsError(err) });
                 if (this.generations.get(actionId) === gen) {
                     ev.action.setTitle("Something\nWent\nWrong.");
                 }
@@ -9526,8 +9764,9 @@ let TarkovGoonsLocation = (() => {
                 const elapsedMs = Date.now() - new Date(report.reported).getTime();
                 action.setTitle(`${report.location}\n${formatElapsed(elapsedMs)}`);
             }
-            catch {
-                // silent — keep last title
+            catch (err) {
+                // silent - keep last title, but log the reason
+                diag.throttled("error", "goons-fetch", "API", "Goons report fetch failed - keeping last known title", { err: describeFsError(err) });
             }
         }
         stopAllTimers(actionId) {
@@ -9715,8 +9954,13 @@ class TarkovApiService {
         try {
             const res = await fetch(url);
             const json = await res.json();
-            if (!isMapsApiResponse(json))
+            if (!isMapsApiResponse(json)) {
+                diag.warn("API", "Maps API returned an unexpected response format - no map data stored", {
+                    endpoint: url,
+                    gameMode: mode,
+                });
                 return [];
+            }
             const consolidated = json.maps.map((m) => ({
                 ...m,
                 bosses: consolidateBosses(m.bosses),
@@ -9727,6 +9971,7 @@ class TarkovApiService {
             return consolidated;
         }
         catch (err) {
+            diag.throttled("error", `maps-fetch:${mode}`, "API", "Fetching map data failed (offline, DNS, or API down?)", { endpoint: url, gameMode: mode, err: describeFsError(err) });
             streamDeck.logger.error(`Error fetching ${mode} maps:`, err);
             return [];
         }
@@ -9844,14 +10089,19 @@ class TarkovApiService {
                     streamDeck.logger.info(`Processed ${mode} trader data (${traders.length} traders)`);
                 }
                 else {
+                    diag.warn("API", `Empty ${mode} trader data - keeping previous data`, {
+                        endpoint: url,
+                    });
                     streamDeck.logger.warn(`Empty ${mode} trader data, keeping previous data`);
                 }
             }
             else {
+                diag.warn("API", `Invalid ${mode} trader data response format`, { endpoint: url });
                 streamDeck.logger.error(`Invalid ${mode} trader data response`);
             }
         }
         catch (err) {
+            diag.throttled("error", `traders-fetch:${mode}`, "API", "Fetching trader data failed (offline, DNS, or API down?)", { endpoint: url, gameMode: mode, err: describeFsError(err) });
             streamDeck.logger.error(`Error fetching ${mode} trader data:`, err);
         }
         this.scheduleTraderWatch(mode, !fetched);
@@ -9880,8 +10130,12 @@ class TarkovApiService {
                 streamDeck.logger.info("Datacenter list updated.");
                 return data;
             }
+            diag.warn("API", "Datacenter response has an unexpected format", {
+                endpoint: ENDPOINTS.DATACENTERS,
+            });
         }
         catch (err) {
+            diag.throttled("error", "datacenters-fetch", "API", "Fetching datacenter list failed (offline, DNS, or API down?)", { endpoint: ENDPOINTS.DATACENTERS, err: describeFsError(err) });
             streamDeck.logger.error("Error fetching datacenter data:", err);
         }
         return {};
@@ -9905,8 +10159,12 @@ class TarkovApiService {
                 streamDeck.logger.info("Local map names loaded successfully");
                 return json;
             }
+            diag.warn("API", "Local map names response has an unexpected format", {
+                endpoint: ENDPOINTS.LOCAL_MAP_NAMES,
+            });
         }
         catch (err) {
+            diag.throttled("error", "local-map-names-fetch", "API", "Fetching local map names failed (offline, DNS, or API down?)", { endpoint: ENDPOINTS.LOCAL_MAP_NAMES, err: describeFsError(err) });
             streamDeck.logger.error("Error fetching local map names:", err);
         }
         return [];
@@ -9927,16 +10185,29 @@ class TarkovApiService {
         try {
             let response = await fetch(primary);
             if (!response.ok) {
+                diag.warn("API", "Boss image not available at primary URL, trying fallback", {
+                    bossId,
+                    url: primary,
+                    status: response.status,
+                });
                 response = await fetch(BOSS_IMAGE_FALLBACK);
             }
-            if (!response.ok)
+            if (!response.ok) {
+                diag.warn("API", "Boss image unavailable - primary and fallback URL both failed", {
+                    bossId,
+                    primaryUrl: primary,
+                    fallbackUrl: BOSS_IMAGE_FALLBACK,
+                    fallbackStatus: response.status,
+                });
                 return null;
+            }
             const buf = await response.arrayBuffer();
             const dataUrl = `data:image/webp;base64,${Buffer.from(buf).toString("base64")}`;
             this.bossImageCache.set(bossId, dataUrl);
             return dataUrl;
         }
         catch (err) {
+            diag.throttled("error", `boss-image:${bossId}`, "API", "Failed to fetch boss image", { bossId, url: primary, err: describeFsError(err) });
             streamDeck.logger.error(`Failed to fetch boss image for ${bossId}:`, err);
             return null;
         }
@@ -10028,7 +10299,11 @@ let TarkovTraderRestock = (() => {
                 try {
                     this.applyTraderImage(action, settings.selectedTrader, settings.game_mode);
                 }
-                catch {
+                catch (err) {
+                    diag.warn("ACTION", "Failed to apply trader image on the action", {
+                        trader: settings.selectedTrader,
+                        err: describeFsError(err),
+                    });
                     action.setImage("");
                 }
                 return;
@@ -10041,7 +10316,11 @@ let TarkovTraderRestock = (() => {
             try {
                 this.applyTraderImage(action, settings.selectedTrader, settings.game_mode);
             }
-            catch {
+            catch (err) {
+                diag.warn("ACTION", "Failed to apply trader image on the action", {
+                    trader: settings.selectedTrader,
+                    err: describeFsError(err),
+                });
                 action.setImage("");
             }
             await this.startUpdating(action, settings);
@@ -10134,6 +10413,10 @@ let TarkovTraderRestock = (() => {
             }
             const imagePath = path.join(process.cwd(), "assets", `${traderName}.png`);
             if (!fs.existsSync(imagePath)) {
+                diag.warn("FS", "Trader image asset not found - button will have no image", {
+                    trader: traderName,
+                    expectedPath: imagePath,
+                });
                 action.setImage("");
                 return;
             }
@@ -10186,6 +10469,9 @@ let TarkovTraderRestock = (() => {
             const soundFile = settings.soundPath;
             streamDeck.logger.info(`[RESTOCK SOUND] Attempting to play: ${soundFile}`);
             if (!fs.existsSync(soundFile)) {
+                diag.warn("FS", "Restock sound file not found - no sound will play", {
+                    soundFile,
+                });
                 streamDeck.logger.warn(`[RESTOCK SOUND] File not found: ${soundFile}`);
                 return;
             }
@@ -10196,6 +10482,10 @@ let TarkovTraderRestock = (() => {
                 streamDeck.logger.info(`[RESTOCK SOUND] Playback started`);
             }
             catch (err) {
+                diag.warn("ACTION", "Restock sound playback failed", {
+                    soundFile,
+                    err: err?.message ?? String(err),
+                });
                 streamDeck.logger.error(`[RESTOCK SOUND] Failed: ${err.message}`);
             }
         }
@@ -10215,79 +10505,218 @@ const REGISTRY_PATHS = [
 ];
 const REG_INSTALL_LOCATION = /InstallLocation\s+REG_SZ\s+(.+)/i;
 async function detectEftPath() {
+    diag.info("PATH", "EFT path auto-detection started (checking registry keys)");
     for (const regPath of REGISTRY_PATHS) {
+        let stdout;
         try {
-            const { stdout } = await execAsync(`reg query "${regPath}" /v InstallLocation`, {
+            const result = await execAsync(`reg query "${regPath}" /v InstallLocation`, {
                 encoding: "utf8",
             });
-            const match = stdout.match(REG_INSTALL_LOCATION);
-            if (!match?.[1])
-                continue;
-            const installPath = match[1].trim();
-            const candidate = resolveLogsRoot(installPath);
-            if (candidate) {
-                return { success: true, path: candidate };
-            }
+            stdout = result.stdout;
         }
-        catch {
+        catch (err) {
+            // reg.exe exits non-zero when the key does not exist - normal for one of the two keys.
+            diag.info("PATH", `Registry key not usable (skipping)`, {
+                regPath,
+                reason: err?.code ? `exit code ${err.code}` : describeFsError(err),
+            });
             continue;
         }
+        const match = stdout.match(REG_INSTALL_LOCATION);
+        if (!match?.[1]) {
+            diag.warn("PATH", "Registry key exists but InstallLocation value is missing or empty", {
+                regPath,
+            });
+            continue;
+        }
+        const installPath = match[1].trim();
+        let logsExists;
+        try {
+            logsExists = fs.existsSync(`${installPath}\\Logs`);
+        }
+        catch (err) {
+            diag.warn("PATH", "Cannot check the detected install path", {
+                installPath,
+                err: describeFsError(err),
+            });
+            continue;
+        }
+        if (logsExists) {
+            diag.info("PATH", "EFT path auto-detected from registry", { installPath });
+            return { success: true, path: installPath };
+        }
+        diag.warn("PATH", "Detected install path has no Logs folder (game never run from here?)", {
+            installPath,
+            checkedPath: `${installPath}\\Logs`,
+        });
     }
-    return {
-        success: false,
-        error: "EFT installation not found. Please enter the path manually.",
-    };
-}
-function resolveLogsRoot(installPath) {
-    if (fs.existsSync(`${installPath}\\Logs`)) {
-        return installPath;
-    }
-    return null;
+    const error = "EFT installation not found. Please enter the path manually.";
+    diag.warn("PATH", `EFT path auto-detection failed - ${error}`, {
+        triedRegistryKeys: REGISTRY_PATHS.length,
+        hint: "Set the path manually in the property inspector; the problem will be logged with details.",
+    });
+    return { success: false, error };
 }
 
 class SettingsService {
     cache = null;
+    loggedFirstLoad = false;
     load() {
         if (this.cache)
             return this.cache;
         const defaults = { ...DEFAULT_USER_SETTINGS };
         try {
             if (fs.existsSync(SETTINGS_FILE_PATH)) {
-                const raw = fs.readFileSync(SETTINGS_FILE_PATH, "utf8");
-                const parsed = JSON.parse(raw);
+                let raw;
+                try {
+                    raw = fs.readFileSync(SETTINGS_FILE_PATH, "utf8");
+                }
+                catch (err) {
+                    diag.error("SETTINGS", "Cannot read settings file - using default settings", {
+                        file: SETTINGS_FILE_PATH,
+                        err: describeFsError(err),
+                    });
+                    this.cache = defaults;
+                    return defaults;
+                }
+                let parsed;
+                try {
+                    parsed = JSON.parse(raw);
+                }
+                catch (err) {
+                    diag.error("SETTINGS", "Settings file contains invalid JSON - using default settings", {
+                        file: SETTINGS_FILE_PATH,
+                        parseError: describeFsError(err),
+                        filePreview: raw.slice(0, 200),
+                    });
+                    this.cache = defaults;
+                    return defaults;
+                }
                 const currentMapInfo = parsed.current_map_info ?? {};
                 const gameMode = currentMapInfo.game_mode ?? "PVP";
                 this.cache = {
                     map_autoupdate_check: currentMapInfo.map_autoupdate_check ?? false,
                     game_mode: gameMode,
                     raid_autoupdate_check: parsed.current_server_info?.raid_autoupdate_check ?? false,
-                    eftInstallPath: parsed.global?.eft_install_path ?? "",
+                    eftInstallPath: normalizeEftPath(parsed.global?.eft_install_path ?? ""),
                 };
+                const logFn = this.loggedFirstLoad ? "debug" : "info";
+                diag[logFn]("SETTINGS", "Settings loaded", {
+                    file: SETTINGS_FILE_PATH,
+                    game_mode: this.cache.game_mode,
+                    eftInstallPath: this.cache.eftInstallPath || "(empty)",
+                    map_autoupdate_check: this.cache.map_autoupdate_check,
+                    raid_autoupdate_check: this.cache.raid_autoupdate_check,
+                });
+                this.loggedFirstLoad = true;
                 return this.cache;
             }
+            diag.info("SETTINGS", "Settings file does not exist yet - starting with defaults", {
+                file: SETTINGS_FILE_PATH,
+            });
         }
-        catch {
-            // fallthrough to defaults
+        catch (err) {
+            diag.error("SETTINGS", "Unexpected error while loading settings - using defaults", {
+                file: SETTINGS_FILE_PATH,
+                err: describeFsError(err),
+            });
         }
         this.cache = defaults;
         return defaults;
     }
+    /**
+     * Merges `updates` into the settings file.
+     *  - undefined values are dropped (they used to erase stored keys!)
+     *  - nested plain objects are merged key-by-key instead of replacing
+     *  - a corrupt existing file is reported and overwritten instead of blocking the save
+     */
     save(updates) {
         try {
             let existing = {};
             if (fs.existsSync(SETTINGS_FILE_PATH)) {
-                existing = JSON.parse(fs.readFileSync(SETTINGS_FILE_PATH, "utf8"));
+                try {
+                    existing = JSON.parse(fs.readFileSync(SETTINGS_FILE_PATH, "utf8"));
+                }
+                catch (err) {
+                    diag.warn("SETTINGS", "Existing settings file is corrupt - it will be replaced by a fresh one", {
+                        file: SETTINGS_FILE_PATH,
+                        parseError: describeFsError(err),
+                    });
+                    existing = {};
+                }
             }
-            const merged = { ...existing, ...updates };
-            fs.writeFileSync(SETTINGS_FILE_PATH, JSON.stringify(merged, null, 4));
+            if (!existing || typeof existing !== "object")
+                existing = {};
+            this.mergeDefined(existing, updates);
+            fs.writeFileSync(SETTINGS_FILE_PATH, JSON.stringify(existing, null, 4));
             this.cache = null;
+            diag.debug("SETTINGS", "Settings saved", { file: SETTINGS_FILE_PATH });
         }
-        catch {
-            // silent fail
+        catch (err) {
+            diag.error("SETTINGS", "Failed to save settings file", {
+                file: SETTINGS_FILE_PATH,
+                err: describeFsError(err),
+            });
         }
     }
+    /** Recursively merges `patch` into `target`, skipping undefined values. */
+    mergeDefined(target, patch) {
+        for (const [key, value] of Object.entries(patch)) {
+            if (value === undefined)
+                continue;
+            const targetValue = target[key];
+            if (value &&
+                typeof value === "object" &&
+                !Array.isArray(value) &&
+                targetValue &&
+                typeof targetValue === "object" &&
+                !Array.isArray(targetValue)) {
+                this.mergeDefined(targetValue, value);
+            }
+            else {
+                target[key] = value;
+            }
+        }
+    }
+    /**
+     * Persists the EFT path into the global settings. Always normalizes and
+     * validates first; the validation result is returned so callers (property
+     * inspector sync) can surface concrete problems to the user.
+     */
     setEftInstallPath(installPath) {
-        this.save({ global: { eft_install_path: installPath } });
+        const normalized = normalizeEftPath(installPath);
+        if (normalized !== (installPath ?? "").trim()) {
+            diag.info("PATH", "EFT path was normalized before saving", {
+                entered: installPath,
+                normalized: normalized || "(empty)",
+            });
+        }
+        if (!normalized) {
+            diag.warn("PATH", "EFT path cleared / set to empty - log-based actions will not work until a valid path is set");
+            this.save({ global: { eft_install_path: "" } });
+            return { path: "", valid: false, problems: ["path is empty / not set"] };
+        }
+        const validation = validateEftPath(normalized);
+        if (validation.valid) {
+            diag.info("PATH", "EFT path set and validated successfully", { path: normalized });
+        }
+        else {
+            diag.warn("PATH", "EFT path was set but has problems - log reading will fail until it is fixed", { path: normalized, problems: validation.problems });
+        }
+        this.save({ global: { eft_install_path: normalized } });
+        return validation;
+    }
+    /**
+     * Resolves the effective EFT path: the globally saved path is the single
+     * source of truth (every property inspector writes to it); a non-empty
+     * action-level path is only used as a fallback when global is empty.
+     * Always normalized.
+     */
+    resolvePath(actionPath) {
+        const global = this.load().eftInstallPath;
+        if (global)
+            return global;
+        return normalizeEftPath(actionPath ?? "");
     }
     setMapInfoFlags(opts) {
         const current = this.load();
@@ -10324,13 +10753,21 @@ async function handleCommonCommands(ev) {
     if (!payload?.command)
         return false;
     if (payload.command === "autoDetectPath") {
+        diag.info("PATH", "Auto-detect requested from property inspector");
         const result = await detectEftPath();
         streamDeck.logger.info("Auto-detect result:", JSON.stringify(result));
         if (result.success && result.path) {
-            await ev.action.setSettings({
-                ...(await ev.action.getSettings()),
-                eft_install_path: result.path,
-            });
+            try {
+                await ev.action.setSettings({
+                    ...(await ev.action.getSettings()),
+                    eft_install_path: result.path,
+                });
+            }
+            catch (err) {
+                diag.warn("PATH", "Could not write detected path into action settings", {
+                    err: String(err),
+                });
+            }
             settingsService.setEftInstallPath(result.path);
             await sendToInspector({
                 event: "autoDetectResult",
@@ -10339,6 +10776,9 @@ async function handleCommonCommands(ev) {
             });
         }
         else {
+            diag.warn("PATH", "Auto-detect could not find the EFT installation", {
+                reportedError: result.error,
+            });
             await sendToInspector({
                 event: "autoDetectResult",
                 success: false,
@@ -10361,9 +10801,87 @@ async function sendToInspector(msg) {
     try {
         await streamDeck.ui.sendToPropertyInspector(msg);
     }
-    catch {
-        // property inspector closed
+    catch (err) {
+        diag.debug("GENERAL", "sendToPropertyInspector failed (property inspector probably closed)", {
+            err: String(err),
+        });
     }
+}
+
+/**
+ * Keeps the globally stored EFT path in sync with edits made in a property
+ * inspector.
+ *
+ * WHY THIS EXISTS (the manual-path bug):
+ * `settingsService.resolvePath()` treats the globally saved path
+ * (`user_settings.json` -> `global.eft_install_path`) as the single source of
+ * truth; the action-level `eft_install_path` is only a fallback used while the
+ * global path is empty. A path typed into a property inspector lands ONLY in
+ * the action settings (written by sdpi-components), so without an explicit
+ * write-through it would never reach the global file - and would be silently
+ * ignored whenever the global file already contained a (possibly stale) value.
+ * That is exactly why a manually entered path "did nothing" until the user
+ * pressed Auto Detect (which DOES write the global path and restarts consumers).
+ *
+ * Stream Deck delivers `didReceiveSettings` both for real edits (the user typed
+ * into the path field) and for ECHOES (the property inspector merely loaded its
+ * stored settings, or the plugin itself called `setSettings`). Persisting on
+ * every event would let a stale action-level value overwrite a newer global
+ * path, so the first event per action instance after plugin start is treated as
+ * a baseline and only genuine changes are written through. When the incoming
+ * path already equals the global one (echo of the auto-detect write), the save
+ * is skipped to avoid duplicate work and log noise.
+ */
+class ActionPathSync {
+    lastSeen = new Map();
+    sync(actionId, incomingRaw, source) {
+        if (typeof incomingRaw !== "string") {
+            return { changed: false, path: "", validation: null };
+        }
+        const incoming = normalizeEftPath(incomingRaw);
+        const lastSeen = this.lastSeen.get(actionId);
+        if (lastSeen === undefined) {
+            // First settings delivery after plugin start: baseline only, never
+            // persist (this is the property-inspector-open echo, not an edit).
+            this.lastSeen.set(actionId, incoming);
+            return { changed: false, path: incoming, validation: null };
+        }
+        if (incoming === lastSeen) {
+            return { changed: false, path: incoming, validation: null };
+        }
+        this.lastSeen.set(actionId, incoming);
+        if (incoming === settingsService.load().eftInstallPath) {
+            // Global already matches (e.g. the didReceiveSettings echo caused by
+            // the auto-detect write) - nothing to sync.
+            return { changed: false, path: incoming, validation: null };
+        }
+        diag.info("PATH", "EFT path changed in property inspector - syncing to global settings", {
+            source,
+            actionId,
+            previous: settingsService.load().eftInstallPath || "(empty)",
+            incoming: incoming || "(empty)",
+        });
+        const validation = settingsService.setEftInstallPath(incoming);
+        return { changed: true, path: incoming, validation };
+    }
+}
+/**
+ * Tells the open property inspector how a manually saved path validated, so a
+ * bad manual path is never silently dead again. Safe to call when no property
+ * inspector is visible.
+ */
+function sendManualPathResultToInspector(result) {
+    const message = {
+        event: "manualPathResult",
+        success: !!result.validation?.valid,
+        path: result.path,
+        problems: result.validation?.problems,
+    };
+    void streamDeck.ui
+        .sendToPropertyInspector(message)
+        .catch((err) => {
+        diag.debug("PATH", "Could not deliver manual-path result to the property inspector (probably closed)", { err: String(err) });
+    });
 }
 
 function extractTimestamp(folderName) {
@@ -10373,6 +10891,10 @@ function extractTimestamp(folderName) {
     const [, year, month, day, hour, minute, second] = match;
     return new Date(Number(year), Number(month) - 1, Number(day), Number(hour), Number(minute), Number(second)).getTime();
 }
+/**
+ * Reads `Logs` directory and returns log_ folders sorted by timestamp.
+ * Throws the original fs error so callers can classify it.
+ */
 async function listLogFolders(eftPath) {
     const logsPath = `${eftPath}\\Logs`;
     const entries = await fs.promises.readdir(logsPath, { withFileTypes: true });
@@ -10389,19 +10911,37 @@ async function listAppLogFiles(folderPath) {
         .map((f) => f.name);
 }
 async function getLatestLogFile(eftPath) {
-    if (!eftPath)
+    if (!eftPath) {
+        // Polled every second by the raid watcher - throttle to avoid log flooding.
+        diag.throttled("warn", "no-eft-path", "PATH", "No EFT path configured - cannot look up game logs. Set the path in the property inspector.");
         return null;
+    }
     try {
         const folders = await listLogFolders(eftPath);
-        if (folders.length === 0)
+        if (folders.length === 0) {
+            diag.throttled("debug", `no-log-folders:${eftPath}`, "FS", "Logs folder exists but contains no log_* folders yet (game not started since it was created)", { logsPath: `${eftPath}\\Logs` });
             return null;
+        }
         const latestFolder = `${eftPath}\\Logs\\${folders[0].name}`;
         const files = await listAppLogFiles(latestFolder);
-        if (files.length === 0)
+        if (files.length === 0) {
+            diag.throttled("warn", `no-app-log:${latestFolder}`, "FS", "Latest log folder contains no application log file", { latestFolder, fragment: LOG_APP_FILE_FRAGMENT });
             return null;
+        }
         return `${latestFolder}\\${files[0]}`;
     }
-    catch {
+    catch (err) {
+        const logsPath = `${eftPath}\\Logs`;
+        const code = err?.code;
+        if (code === "ENOENT") {
+            diag.throttled("warn", `logs-missing:${eftPath}`, "PATH", "Logs folder not found - the configured path is wrong or has never been used by the game", { logsPath, err: describeFsError(err) });
+        }
+        else if (code === "EACCES" || code === "EPERM") {
+            diag.throttled("error", `logs-noaccess:${eftPath}`, "FS", "No read access to the Logs folder", { logsPath, err: describeFsError(err) });
+        }
+        else {
+            diag.throttled("error", `logs-listing:${eftPath}`, "FS", "Failed to list the Logs folder", { logsPath, err: describeFsError(err) });
+        }
         return null;
     }
 }
@@ -10426,12 +10966,15 @@ async function findServerFromLogs(eftPath) {
             return null;
         const lines = await readLinesReversed(latestFile);
         const sidPrefix = findFirstMatch(lines, LOG_REGEX_SID);
-        if (!sidPrefix)
+        if (!sidPrefix) {
+            diag.throttled("debug", `no-sid:${latestFile}`, "FS", "No server id (Sid) found in the latest log - probably not connected / not in raid yet", { logFile: latestFile });
             return null;
+        }
         await tarkovApiService.getDatacenters();
         return { sid: sidPrefix, datacenter: stateService.resolveDatacenter(sidPrefix) };
     }
     catch (err) {
+        diag.throttled("error", `server-read:${eftPath}`, "FS", "Failed to read the EFT log file for server lookup", { eftPath, err: describeFsError(err) });
         streamDeck.logger.error("Error finding server from logs:", err);
         return null;
     }
@@ -10446,8 +10989,10 @@ async function findCurrentMapFromLogs(eftPath, mode) {
         const lines = await readLinesReversed(latestFile);
         if (mode === "PVE" || mode === "SEASON") {
             const sceneName = findFirstMatch(lines, LOG_REGEX_SCENE_PRESET);
-            if (!sceneName)
+            if (!sceneName) {
+                diag.throttled("debug", `no-scene:${latestFile}`, "FS", "No scene preset found in the latest log - probably not in raid", { logFile: latestFile, mode });
                 return null;
+            }
             const normalised = sceneName.toLowerCase();
             const localMapNames = await tarkovApiService.getLocalMapNames();
             for (const entry of localMapNames) {
@@ -10456,12 +11001,18 @@ async function findCurrentMapFromLogs(eftPath, mode) {
                     return entry.dataID;
                 }
             }
+            diag.throttled("info", `unknown-scene:${normalised}`, "FS", "Scene name from log is not in the known map list - returning it raw", { sceneName: normalised, mode });
             return normalised;
         }
         const location = findFirstMatch(lines, LOG_REGEX_LOCATION);
-        return location ?? null;
+        if (!location) {
+            diag.throttled("debug", `no-location:${latestFile}`, "FS", "No location found in the latest log - probably not in raid", { logFile: latestFile, mode });
+            return null;
+        }
+        return location;
     }
     catch (err) {
+        diag.throttled("error", `map-read:${eftPath}:${mode}`, "FS", "Failed to read the EFT log file for map lookup", { eftPath, mode, err: describeFsError(err) });
         streamDeck.logger.error("Error reading logs:", err);
         return null;
     }
@@ -10524,6 +11075,8 @@ let TarkovCurrentMapInfo = (() => {
         autoUpdateTimers = new Map();
         generations = new Map();
         errorResetTimers = new Map();
+        /** Persists manual path edits from the PI into the global settings (echo-safe). */
+        pathSync = new ActionPathSync();
         async onWillAppear(ev) {
             const raw = ev.payload.settings ?? {};
             let settings = migrateLegacy(raw);
@@ -10545,8 +11098,7 @@ let TarkovCurrentMapInfo = (() => {
                 ev.action.setTitle(SELECT_MODE_TITLE);
                 return;
             }
-            const global = settingsService.load();
-            const eftInstallPath = global.eftInstallPath || settings.eft_install_path || "";
+            const eftInstallPath = settingsService.resolvePath(settings.eft_install_path);
             this.stopAutoUpdate(ev.action.id);
             this.clearErrorReset(ev.action.id);
             const gen = this.bumpGen(ev.action.id);
@@ -10566,7 +11118,10 @@ let TarkovCurrentMapInfo = (() => {
                         this.stopAutoUpdate(ev.action.id);
                         return;
                     }
-                    const r = await this.lookupCurrentMap(eftInstallPath, settings.game_mode);
+                    const r = await this.lookupCurrentMap(
+                    // Re-resolve on every tick so a manual path change in the
+                    // property inspector takes effect without pressing the key again.
+                    settingsService.resolvePath(eftInstallPath), settings.game_mode);
                     // Keep the last known map if a refresh fails; don't wipe state on a transient miss.
                     if (r.ok) {
                         stateService.currentLocationId = r.locationId;
@@ -10577,6 +11132,11 @@ let TarkovCurrentMapInfo = (() => {
                 await streamDeck.profiles.switchToProfile(ev.action.device.id, this.getProfilePath(ev.action.device.type));
             }
             catch (err) {
+                diag.error("ACTION", "Failed to switch Stream Deck profile", {
+                    deviceType: ev.action.device.type,
+                    profilePath: this.getProfilePath(ev.action.device.type),
+                    err: describeFsError(err),
+                });
                 streamDeck.logger.error("Failed to switch profile", err);
                 await this.showError(ev.action, ERROR_TITLES.PROFILE_SWITCH_FAILED);
             }
@@ -10587,10 +11147,19 @@ let TarkovCurrentMapInfo = (() => {
          */
         async lookupCurrentMap(eftInstallPath, mode) {
             if (!eftInstallPath) {
+                diag.throttled("warn", "mapinfo-nopath", "PATH", "Map lookup failed: no EFT path is set (neither in action settings nor in global settings)", { mode });
                 return { ok: false, errorTitle: ERROR_TITLES.NO_INSTALL_PATH };
             }
             // Adjust "Logs" if your log-service resolves a different folder.
             if (!existsSync$1(join$1(eftInstallPath, "Logs"))) {
+                // The exact user-reported case: manually configured path that cannot be found.
+                // Run the full validation to log *why* the path does not work.
+                const validation = validateEftPath(eftInstallPath);
+                diag.throttled("error", `mapinfo-logs-missing:${eftInstallPath}`, "PATH", "Map lookup failed: Logs folder not found - validating the configured path", {
+                    configuredPath: eftInstallPath,
+                    mode,
+                    problems: validation.problems,
+                }, 60_000);
                 return { ok: false, errorTitle: ERROR_TITLES.LOGS_FOLDER_MISSING };
             }
             try {
@@ -10601,6 +11170,7 @@ let TarkovCurrentMapInfo = (() => {
                 return { ok: true, locationId };
             }
             catch (err) {
+                diag.throttled("error", `mapinfo-read:${eftInstallPath}`, "FS", "Unexpected error while reading EFT logs", { configuredPath: eftInstallPath, mode, err: describeFsError(err) });
                 streamDeck.logger.error("Failed to read EFT logs", err);
                 return { ok: false, errorTitle: ERROR_TITLES.READ_FAILED };
             }
@@ -10643,8 +11213,13 @@ let TarkovCurrentMapInfo = (() => {
                 map_autoupdate_check: settings.map_autoupdate_check,
                 game_mode: settings.game_mode,
             });
-            if (settings.eft_install_path) {
-                settingsService.setEftInstallPath(settings.eft_install_path);
+            // Persist the path only when it actually changed compared to what this
+            // action already stored. The first didReceiveSettings after plugin start
+            // is treated as a baseline (it is the PI-open echo, not an edit), so a
+            // stale action-level value can never overwrite the newer global path.
+            const syncResult = this.pathSync.sync(ev.action.id, settings.eft_install_path, "map-info");
+            if (syncResult.changed) {
+                sendManualPathResultToInspector(syncResult);
             }
         }
         async onSendToPlugin(ev) {
@@ -10718,10 +11293,12 @@ class MapInfoBaseAction extends SingletonAction {
         const settings = settingsService.load();
         const locationId = stateService.currentLocationId;
         if (!locationId) {
+            diag.throttled("debug", "mapinfo-nolocation", "ACTION", "No current location known - press 'Get Current Map Info' to detect it from the game logs");
             return this.renderUnavailable();
         }
         const mapData = stateService.getMapData(locationId, settings.game_mode);
         if (!mapData) {
+            diag.throttled("debug", `mapinfo-nodata:${locationId}:${settings.game_mode}`, "ACTION", "Map data not loaded (yet) for the current location", { locationId, game_mode: settings.game_mode });
             return "\nNo Map\nData";
         }
         return this.render(mapData);
@@ -10850,8 +11427,9 @@ let TarkovCurrentMapInfo_CurrentServer = (() => {
                 const info = await findServerFromLogs(settings.eftInstallPath);
                 this.lastDatacenter = info?.datacenter ?? null;
             }
-            catch {
-                // keep last known
+            catch (err) {
+                // keep last known value, but record what went wrong
+                diag.throttled("error", "mapserver-lookup", "ACTION", "Server lookup failed - keeping last known value", { err: describeFsError(err) });
             }
             if (this.lastDatacenter) {
                 return `\n\n${formatDatacenter(this.lastDatacenter)}`;
@@ -10885,6 +11463,8 @@ let TarkovCurrentServerInfo = (() => {
         }
         timers = new Map();
         generations = new Map();
+        /** Persists manual path edits from the PI into the global settings (echo-safe). */
+        pathSync = new ActionPathSync();
         async onWillAppear(ev) {
             await this.maybeInheritFromGlobal(ev.action, ev.payload.settings ?? {});
             ev.action.setTitle(DEFAULT_TITLE);
@@ -10894,16 +11474,17 @@ let TarkovCurrentServerInfo = (() => {
             this.stopTimer(actionId);
             const gen = this.bumpGen(actionId);
             ev.action.setTitle(LOADING_TITLE);
-            const settings = settingsService.load();
             const actionSettings = ev.payload.settings ?? {};
-            const eftInstallPath = settings.eftInstallPath || actionSettings.eft_install_path || "";
-            const raidAutoUpdate = !!(actionSettings.raid_autoupdate_check ?? settings.raid_autoupdate_check);
+            const eftInstallPath = settingsService.resolvePath(actionSettings.eft_install_path);
+            const raidAutoUpdate = !!(actionSettings.raid_autoupdate_check ?? settingsService.load().raid_autoupdate_check);
             const updateUI = async () => {
                 if (this.generations.get(actionId) !== gen) {
                     this.stopTimer(actionId);
                     return null;
                 }
-                const info = await findServerFromLogs(eftInstallPath);
+                // Re-resolve on every tick so a manual path change in the property
+                // inspector takes effect without pressing the key again.
+                const info = await findServerFromLogs(settingsService.resolvePath(eftInstallPath));
                 if (this.generations.get(actionId) !== gen) {
                     this.stopTimer(actionId);
                     return null;
@@ -10938,10 +11519,19 @@ let TarkovCurrentServerInfo = (() => {
         }
         onDidReceiveSettings(ev) {
             const { eft_install_path, raid_autoupdate_check } = ev.payload.settings ?? {};
-            settingsService.save({
-                global: { eft_install_path },
-                current_server_info: { raid_autoupdate_check },
-            });
+            // FIX: only persist values that were actually sent and that actually
+            // changed. The old code saved `eft_install_path: undefined` whenever
+            // this action had no path of its own (e.g. when the property inspector
+            // merely loaded), which erased the globally saved path from
+            // user_settings.json - manual paths then stopped working until the
+            // user pressed Auto Detect again.
+            const syncResult = this.pathSync.sync(ev.action.id, eft_install_path, "raid-server");
+            if (syncResult.changed) {
+                sendManualPathResultToInspector(syncResult);
+            }
+            if (typeof raid_autoupdate_check === "boolean") {
+                settingsService.setRaidServerFlags({ raid_autoupdate_check });
+            }
         }
         onWillDisappear(ev) {
             this.stopTimer(ev.action.id);
@@ -11415,12 +12005,18 @@ class RaidLogWatcher {
     onStateChange = null;
     get inRaid() { return this._inRaid; }
     get raidStartMs() { return this._raidStart; }
+    get watchedPath() { return this.eftPath; }
     get elapsedMs() {
         return this._raidStart !== null ? Date.now() - this._raidStart : null;
     }
     start(eftPath, intervalMs) {
+        if (!eftPath) {
+            diag.warn("WATCHER", "Raid log watcher start skipped - no EFT path configured");
+            return;
+        }
         this.stop();
         this.eftPath = eftPath;
+        diag.info("WATCHER", "Raid log watcher started", { eftPath, intervalMs });
         this.initialScan();
         this.pollTimer = setInterval(() => this.poll(), intervalMs);
     }
@@ -11428,6 +12024,7 @@ class RaidLogWatcher {
         if (this.pollTimer) {
             clearInterval(this.pollTimer);
             this.pollTimer = null;
+            diag.debug("WATCHER", "Raid log watcher stopped", { eftPath: this.eftPath });
         }
         this.currentLogFile = null;
         this.bytesRead = 0;
@@ -11435,6 +12032,7 @@ class RaidLogWatcher {
         this._inRaid = false;
     }
     restart(eftPath, intervalMs) {
+        diag.info("WATCHER", "Raid log watcher restarting with new path", { newEftPath: eftPath || "(empty)" });
         this.stop();
         this.start(eftPath, intervalMs);
     }
@@ -11448,11 +12046,19 @@ class RaidLogWatcher {
             this.notify();
         }
         catch (err) {
+            diag.throttled("error", "watcher-initial-scan", "WATCHER", "Initial scan of the latest log failed", { eftPath: this.eftPath, err: describeFsError(err) });
             streamDeck.logger.error("[RAID WATCHER] Initial scan failed:", err);
         }
     }
     async scanFileForState(logFile) {
-        const content = await fs.promises.readFile(logFile, "utf-8");
+        let content;
+        try {
+            content = await fs.promises.readFile(logFile, "utf-8");
+        }
+        catch (err) {
+            diag.throttled("error", `watcher-read:${logFile}`, "FS", "Cannot read the log file while scanning for raid state", { logFile, err: describeFsError(err) });
+            throw err;
+        }
         this.bytesRead = Buffer.byteLength(content, "utf-8");
         let lastStartTs = null;
         let lastEndTs = null;
@@ -11480,6 +12086,10 @@ class RaidLogWatcher {
             if (!logFile)
                 return;
             if (logFile !== this.currentLogFile) {
+                diag.info("WATCHER", "New log file detected (game restarted)", {
+                    previousFile: this.currentLogFile,
+                    newFile: logFile,
+                });
                 this.currentLogFile = logFile;
                 this.bytesRead = 0;
                 this._inRaid = false;
@@ -11488,31 +12098,46 @@ class RaidLogWatcher {
                 this.notify();
                 return;
             }
-            const stat = await fs.promises.stat(logFile);
+            let stat;
+            try {
+                stat = await fs.promises.stat(logFile);
+            }
+            catch (err) {
+                diag.throttled("error", `watcher-stat:${logFile}`, "FS", "Cannot stat the log file during polling", { logFile, err: describeFsError(err) });
+                return;
+            }
             if (stat.size <= this.bytesRead)
                 return;
-            const fd = await fs.promises.open(logFile, "r");
-            const buf = Buffer.alloc(stat.size - this.bytesRead);
-            await fd.read(buf, 0, buf.length, this.bytesRead);
-            await fd.close();
-            this.bytesRead = stat.size;
-            for (const line of buf.toString("utf-8").split("\n")) {
-                const ts = this.parseTs(line);
-                if (!ts)
-                    continue;
-                if (this.isGameStarted(line)) {
-                    this._inRaid = true;
-                    this._raidStart = ts;
-                    this.notify();
+            try {
+                const fd = await fs.promises.open(logFile, "r");
+                const buf = Buffer.alloc(stat.size - this.bytesRead);
+                await fd.read(buf, 0, buf.length, this.bytesRead);
+                await fd.close();
+                this.bytesRead = stat.size;
+                for (const line of buf.toString("utf-8").split("\n")) {
+                    const ts = this.parseTs(line);
+                    if (!ts)
+                        continue;
+                    if (this.isGameStarted(line)) {
+                        this._inRaid = true;
+                        this._raidStart = ts;
+                        diag.info("WATCHER", "Raid start detected in log", { raidStartTs: ts });
+                        this.notify();
+                    }
+                    if (this.isBEClientExit(line) && this._inRaid) {
+                        this._inRaid = false;
+                        this._raidStart = null;
+                        diag.info("WATCHER", "Raid end detected in log");
+                        this.notify();
+                    }
                 }
-                if (this.isBEClientExit(line) && this._inRaid) {
-                    this._inRaid = false;
-                    this._raidStart = null;
-                    this.notify();
-                }
+            }
+            catch (err) {
+                diag.throttled("error", `watcher-incremental:${logFile}`, "FS", "Cannot read new log content during polling", { logFile, err: describeFsError(err) });
             }
         }
         catch (err) {
+            diag.throttled("error", "watcher-poll", "WATCHER", "Unexpected poll error", { eftPath: this.eftPath, err: describeFsError(err) });
             streamDeck.logger.error("[RAID WATCHER] Poll error:", err);
         }
     }
@@ -11553,6 +12178,8 @@ let TarkovRaidTimer = (() => {
         visibleActions = new Set();
         watcherRunning = false;
         currentEftPath = "";
+        /** Persists manual path edits from the PI into the global settings (echo-safe). */
+        pathSync = new ActionPathSync();
         async onWillAppear(ev) {
             this.visibleActions.add(ev.action);
             const eftPath = this.resolveEftPath(ev.payload.settings);
@@ -11568,6 +12195,18 @@ let TarkovRaidTimer = (() => {
             }
         }
         async onDidReceiveSettings(ev) {
+            // FIX (manual-path bug): a path typed into THIS action's property
+            // inspector used to live only in the action settings, while the global
+            // user_settings.json kept its old value. resolvePath() gives the global
+            // path absolute priority, so the typed path was silently ignored and the
+            // watcher kept the stale path until the user pressed Auto Detect (the
+            // only flow that wrote the global settings + restarted the watcher).
+            // The sync below makes a manual edit behave exactly like Auto Detect:
+            // persist to global, then re-resolve and restart the watcher.
+            const syncResult = this.pathSync.sync(ev.action.id, ev.payload.settings?.eft_install_path, "raid-timer");
+            if (syncResult.changed) {
+                sendManualPathResultToInspector(syncResult);
+            }
             const eftPath = this.resolveEftPath(ev.payload.settings);
             if (eftPath !== this.currentEftPath) {
                 await this.ensureWatcher(eftPath);
@@ -11595,18 +12234,32 @@ let TarkovRaidTimer = (() => {
                         this.renderAction(action);
                     }
                 }
+                else {
+                    diag.warn("PATH", "Raid timer: auto-detect ran but no usable EFT path is stored in settings");
+                }
             }
         }
         resolveEftPath(settings) {
-            if (settings?.eft_install_path)
-                return settings.eft_install_path;
-            return settingsService.load().eftInstallPath;
+            // Global path is the source of truth; the (possibly stale) action-level
+            // mirror is only a fallback. Result is always normalized.
+            return settingsService.resolvePath(settings?.eft_install_path);
         }
         async ensureWatcher(eftPath) {
-            if (!eftPath)
+            if (!eftPath) {
+                // The path was cleared: stop watching the previous path instead of
+                // silently keeping it alive, and show the "Set EFT Path" title.
+                if (this.watcherRunning) {
+                    raidLogWatcher.stop();
+                    this.watcherRunning = false;
+                    diag.warn("PATH", "Raid timer: EFT path was cleared - raid log watcher stopped");
+                }
+                this.currentEftPath = "";
+                diag.throttled("warn", "raidtimer-no-path", "PATH", "Raid timer is active but no EFT path is set - it cannot track raids. Set the path in the property inspector.");
                 return;
+            }
             this.currentEftPath = eftPath;
-            if (!this.watcherRunning) {
+            // Start (or restart) when the watcher is not running, or when the configured path changed.
+            if (!this.watcherRunning || raidLogWatcher.watchedPath !== eftPath) {
                 raidLogWatcher.onStateChange = () => {
                     for (const action of this.visibleActions) {
                         this.renderAction(action);
@@ -11651,6 +12304,9 @@ let TarkovRaidTimer = (() => {
     return _classThis;
 })();
 
+// Log everything that goes wrong globally (crashes, dangling promises).
+diag.registerGlobalErrorHandlers();
+logStartupBanner();
 startBackgroundRefreshers();
 streamDeck.actions.registerAction(new TarkovTime());
 streamDeck.actions.registerAction(new TarkovGoonsLocation());
@@ -11667,4 +12323,47 @@ for (const bossInstance of createAllBossInstances()) {
 streamDeck.actions.registerAction(new TarkovCurrentServerInfo());
 streamDeck.actions.registerAction(new TarkovRaidTimer());
 streamDeck.connect();
+/** Logs environment info + validity of the saved EFT path once at startup. */
+function logStartupBanner() {
+    const manifest = readManifest();
+    diag.info("GENERAL", "Plugin starting", {
+        plugin: manifest?.Name ?? "unknown",
+        version: manifest?.Version ?? "unknown",
+        platform: `${process.platform} ${process.arch}`,
+        nodeVersion: process.version,
+        workingDirectory: process.cwd(),
+        settingsFile: SETTINGS_FILE_PATH,
+        diagnosticsFile: DIAG_FILE_PATH,
+    });
+    const settings = settingsService.load();
+    if (!settings.eftInstallPath) {
+        diag.warn("PATH", "No EFT path configured at startup - set it in the property inspector or use auto-detect");
+        return;
+    }
+    const validation = validateEftPath(settings.eftInstallPath);
+    if (validation.valid) {
+        diag.info("PATH", "Saved EFT path validated successfully", { path: validation.path });
+    }
+    else {
+        diag.warn("PATH", "Saved EFT path has problems - related actions will not work until fixed", {
+            path: validation.path,
+            problems: validation.problems,
+        });
+    }
+}
+function readManifest() {
+    // cwd is normally the plugin `bin` folder; the manifest lives one level up.
+    for (const candidate of ["../manifest.json", "manifest.json"]) {
+        try {
+            const raw = fs.readFileSync(path.join(process.cwd(), candidate), "utf8");
+            return JSON.parse(raw);
+        }
+        catch (err) {
+            diag.debug("GENERAL", `Cannot read manifest at ${candidate}`, {
+                err: describeFsError(err),
+            });
+        }
+    }
+    return null;
+}
 //# sourceMappingURL=plugin.js.map

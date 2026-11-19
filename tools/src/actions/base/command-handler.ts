@@ -2,6 +2,7 @@ import streamDeck from "@elgato/streamdeck";
 import type { SendToPluginEvent } from "@elgato/streamdeck";
 import type { JsonValue } from "@elgato/utils";
 import { URL_PATREON } from "../../config/constants";
+import { diag } from "../../services/diagnostics-service";
 import { detectEftPath } from "../../services/path-detect-service";
 import { settingsService } from "../../services/settings-service";
 
@@ -36,14 +37,21 @@ export async function handleCommonCommands(
     if (!payload?.command) return false;
 
     if (payload.command === "autoDetectPath") {
+        diag.info("PATH", "Auto-detect requested from property inspector");
         const result = await detectEftPath();
         streamDeck.logger.info("Auto-detect result:", JSON.stringify(result));
 
         if (result.success && result.path) {
-            await ev.action.setSettings({
-                ...((await ev.action.getSettings()) as object),
-                eft_install_path: result.path,
-            });
+            try {
+                await ev.action.setSettings({
+                    ...((await ev.action.getSettings()) as object),
+                    eft_install_path: result.path,
+                });
+            } catch (err) {
+                diag.warn("PATH", "Could not write detected path into action settings", {
+                    err: String(err),
+                });
+            }
             settingsService.setEftInstallPath(result.path);
 
             await sendToInspector<AutoDetectResultMessage>({
@@ -52,6 +60,9 @@ export async function handleCommonCommands(
                 path: result.path,
             });
         } else {
+            diag.warn("PATH", "Auto-detect could not find the EFT installation", {
+                reportedError: result.error,
+            });
             await sendToInspector<AutoDetectResultMessage>({
                 event: "autoDetectResult",
                 success: false,
@@ -76,7 +87,9 @@ export async function handleCommonCommands(
 async function sendToInspector<T>(msg: T): Promise<void> {
     try {
         await streamDeck.ui.sendToPropertyInspector(msg as unknown as JsonValue);
-    } catch {
-        // property inspector closed
+    } catch (err) {
+        diag.debug("GENERAL", "sendToPropertyInspector failed (property inspector probably closed)", {
+            err: String(err),
+        });
     }
 }

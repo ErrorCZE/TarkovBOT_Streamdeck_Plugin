@@ -11,6 +11,10 @@ import {
 import type { JsonValue, JsonObject } from "@elgato/utils";
 import { INTERVALS } from "../config/constants";
 import { handleCommonCommands } from "./base/command-handler";
+import {
+    ActionPathSync,
+    sendManualPathResultToInspector,
+} from "./base/path-sync";
 import { settingsService } from "../services/settings-service";
 import { findServerFromLogs } from "../services/log-service";
 import { formatDatacenter } from "../utils/time-format";
@@ -24,6 +28,8 @@ const NO_SERVER_TITLE = `No\nServer\nFound`;
 export class TarkovCurrentServerInfo extends SingletonAction {
     private timers = new Map<string, NodeJS.Timeout>();
     private generations = new Map<string, number>();
+    /** Persists manual path edits from the PI into the global settings (echo-safe). */
+    private pathSync = new ActionPathSync();
 
     override async onWillAppear(ev: WillAppearEvent<RaidServerSettings>): Promise<void> {
         await this.maybeInheritFromGlobal(ev.action, ev.payload.settings ?? ({} as RaidServerSettings));
@@ -36,18 +42,20 @@ export class TarkovCurrentServerInfo extends SingletonAction {
         const gen = this.bumpGen(actionId);
 
         ev.action.setTitle(LOADING_TITLE);
-        const settings = settingsService.load();
         const actionSettings = ev.payload.settings ?? ({} as RaidServerSettings);
-        const eftInstallPath =
-            settings.eftInstallPath || actionSettings.eft_install_path || "";
-        const raidAutoUpdate = !!(actionSettings.raid_autoupdate_check ?? settings.raid_autoupdate_check);
+        const eftInstallPath = settingsService.resolvePath(actionSettings.eft_install_path);
+        const raidAutoUpdate = !!(
+            actionSettings.raid_autoupdate_check ?? settingsService.load().raid_autoupdate_check
+        );
 
         const updateUI = async () => {
             if (this.generations.get(actionId) !== gen) {
                 this.stopTimer(actionId);
                 return null;
             }
-            const info = await findServerFromLogs(eftInstallPath);
+            // Re-resolve on every tick so a manual path change in the property
+            // inspector takes effect without pressing the key again.
+            const info = await findServerFromLogs(settingsService.resolvePath(eftInstallPath));
             if (this.generations.get(actionId) !== gen) {
                 this.stopTimer(actionId);
                 return null;
@@ -80,10 +88,20 @@ export class TarkovCurrentServerInfo extends SingletonAction {
 
     override onDidReceiveSettings(ev: DidReceiveSettingsEvent<RaidServerSettings>): void | Promise<void> {
         const { eft_install_path, raid_autoupdate_check } = ev.payload.settings ?? ({} as RaidServerSettings);
-        settingsService.save({
-            global: { eft_install_path },
-            current_server_info: { raid_autoupdate_check },
-        });
+
+        // FIX: only persist values that were actually sent and that actually
+        // changed. The old code saved `eft_install_path: undefined` whenever
+        // this action had no path of its own (e.g. when the property inspector
+        // merely loaded), which erased the globally saved path from
+        // user_settings.json - manual paths then stopped working until the
+        // user pressed Auto Detect again.
+        const syncResult = this.pathSync.sync(ev.action.id, eft_install_path, "raid-server");
+        if (syncResult.changed) {
+            sendManualPathResultToInspector(syncResult);
+        }
+        if (typeof raid_autoupdate_check === "boolean") {
+            settingsService.setRaidServerFlags({ raid_autoupdate_check });
+        }
     }
 
     override onWillDisappear(ev: WillDisappearEvent): void | Promise<void> {

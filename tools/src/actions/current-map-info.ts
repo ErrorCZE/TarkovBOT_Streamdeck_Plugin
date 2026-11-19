@@ -13,9 +13,14 @@ import { existsSync } from "fs";
 import { join } from "path";
 import { DEVICE_PROFILE_MAP, INTERVALS } from "../config/constants";
 import { handleCommonCommands } from "./base/command-handler";
+import {
+    ActionPathSync,
+    sendManualPathResultToInspector,
+} from "./base/path-sync";
 import { settingsService } from "../services/settings-service";
 import { stateService } from "../services/state-service";
 import { findCurrentMapFromLogs } from "../services/log-service";
+import { diag, describeFsError, validateEftPath } from "../services/diagnostics-service";
 import type { GameMode, MapInfoSettings } from "../types";
 
 const SELECT_MODE_TITLE = "Select\nGame\nMode";
@@ -70,6 +75,8 @@ export class TarkovCurrentMapInfo extends SingletonAction {
     private autoUpdateTimers = new Map<string, NodeJS.Timeout>();
     private generations = new Map<string, number>();
     private errorResetTimers = new Map<string, NodeJS.Timeout>();
+    /** Persists manual path edits from the PI into the global settings (echo-safe). */
+    private pathSync = new ActionPathSync();
 
     override async onWillAppear(ev: WillAppearEvent<MapInfoSettings>): Promise<void> {
         const raw = ev.payload.settings ?? ({} as MapInfoSettings);
@@ -97,9 +104,7 @@ export class TarkovCurrentMapInfo extends SingletonAction {
             return;
         }
 
-        const global = settingsService.load();
-        const eftInstallPath =
-            global.eftInstallPath || settings.eft_install_path || "";
+        const eftInstallPath = settingsService.resolvePath(settings.eft_install_path);
 
         this.stopAutoUpdate(ev.action.id);
         this.clearErrorReset(ev.action.id);
@@ -128,7 +133,9 @@ export class TarkovCurrentMapInfo extends SingletonAction {
                         return;
                     }
                     const r = await this.lookupCurrentMap(
-                        eftInstallPath,
+                        // Re-resolve on every tick so a manual path change in the
+                        // property inspector takes effect without pressing the key again.
+                        settingsService.resolvePath(eftInstallPath),
                         settings.game_mode!,
                     );
                     // Keep the last known map if a refresh fails; don't wipe state on a transient miss.
@@ -145,6 +152,11 @@ export class TarkovCurrentMapInfo extends SingletonAction {
                 this.getProfilePath(ev.action.device.type),
             );
         } catch (err) {
+            diag.error("ACTION", "Failed to switch Stream Deck profile", {
+                deviceType: ev.action.device.type,
+                profilePath: this.getProfilePath(ev.action.device.type),
+                err: describeFsError(err),
+            });
             streamDeck.logger.error("Failed to switch profile", err);
             await this.showError(ev.action, ERROR_TITLES.PROFILE_SWITCH_FAILED);
         }
@@ -159,11 +171,33 @@ export class TarkovCurrentMapInfo extends SingletonAction {
         mode: GameMode,
     ): Promise<LookupResult> {
         if (!eftInstallPath) {
+            diag.throttled(
+                "warn",
+                "mapinfo-nopath",
+                "PATH",
+                "Map lookup failed: no EFT path is set (neither in action settings nor in global settings)",
+                { mode },
+            );
             return { ok: false, errorTitle: ERROR_TITLES.NO_INSTALL_PATH };
         }
 
         // Adjust "Logs" if your log-service resolves a different folder.
         if (!existsSync(join(eftInstallPath, "Logs"))) {
+            // The exact user-reported case: manually configured path that cannot be found.
+            // Run the full validation to log *why* the path does not work.
+            const validation = validateEftPath(eftInstallPath);
+            diag.throttled(
+                "error",
+                `mapinfo-logs-missing:${eftInstallPath}`,
+                "PATH",
+                "Map lookup failed: Logs folder not found - validating the configured path",
+                {
+                    configuredPath: eftInstallPath,
+                    mode,
+                    problems: validation.problems,
+                },
+                60_000,
+            );
             return { ok: false, errorTitle: ERROR_TITLES.LOGS_FOLDER_MISSING };
         }
 
@@ -174,6 +208,13 @@ export class TarkovCurrentMapInfo extends SingletonAction {
             }
             return { ok: true, locationId };
         } catch (err) {
+            diag.throttled(
+                "error",
+                `mapinfo-read:${eftInstallPath}`,
+                "FS",
+                "Unexpected error while reading EFT logs",
+                { configuredPath: eftInstallPath, mode, err: describeFsError(err) },
+            );
             streamDeck.logger.error("Failed to read EFT logs", err);
             return { ok: false, errorTitle: ERROR_TITLES.READ_FAILED };
         }
@@ -229,8 +270,17 @@ export class TarkovCurrentMapInfo extends SingletonAction {
             game_mode: settings.game_mode,
         });
 
-        if (settings.eft_install_path) {
-            settingsService.setEftInstallPath(settings.eft_install_path);
+        // Persist the path only when it actually changed compared to what this
+        // action already stored. The first didReceiveSettings after plugin start
+        // is treated as a baseline (it is the PI-open echo, not an edit), so a
+        // stale action-level value can never overwrite the newer global path.
+        const syncResult = this.pathSync.sync(
+            ev.action.id,
+            settings.eft_install_path,
+            "map-info",
+        );
+        if (syncResult.changed) {
+            sendManualPathResultToInspector(syncResult);
         }
     }
 

@@ -10,8 +10,13 @@ import {
 import type { JsonValue, JsonObject } from "@elgato/utils";
 import { INTERVALS, URL_PATREON } from "../config/constants";
 import { raidLogWatcher } from "../services/raid-log-watcher";
+import { diag } from "../services/diagnostics-service";
 import { settingsService } from "../services/settings-service";
 import { handleCommonCommands } from "./base/command-handler";
+import {
+    ActionPathSync,
+    sendManualPathResultToInspector,
+} from "./base/path-sync";
 import type { RaidTimerSettings } from "../types";
 
 const NO_PATH_TITLE = "Set EFT\nPath";
@@ -23,6 +28,8 @@ export class TarkovRaidTimer extends SingletonAction {
     private visibleActions = new Set<any>();
     private watcherRunning = false;
     private currentEftPath = "";
+    /** Persists manual path edits from the PI into the global settings (echo-safe). */
+    private pathSync = new ActionPathSync();
 
     override async onWillAppear(ev: WillAppearEvent<RaidTimerSettings>): Promise<void> {
         this.visibleActions.add(ev.action);
@@ -43,6 +50,23 @@ export class TarkovRaidTimer extends SingletonAction {
     override async onDidReceiveSettings(
         ev: DidReceiveSettingsEvent<RaidTimerSettings>,
     ): Promise<void> {
+        // FIX (manual-path bug): a path typed into THIS action's property
+        // inspector used to live only in the action settings, while the global
+        // user_settings.json kept its old value. resolvePath() gives the global
+        // path absolute priority, so the typed path was silently ignored and the
+        // watcher kept the stale path until the user pressed Auto Detect (the
+        // only flow that wrote the global settings + restarted the watcher).
+        // The sync below makes a manual edit behave exactly like Auto Detect:
+        // persist to global, then re-resolve and restart the watcher.
+        const syncResult = this.pathSync.sync(
+            ev.action.id,
+            ev.payload.settings?.eft_install_path,
+            "raid-timer",
+        );
+        if (syncResult.changed) {
+            sendManualPathResultToInspector(syncResult);
+        }
+
         const eftPath = this.resolveEftPath(ev.payload.settings);
         if (eftPath !== this.currentEftPath) {
             await this.ensureWatcher(eftPath);
@@ -71,19 +95,42 @@ export class TarkovRaidTimer extends SingletonAction {
                 for (const action of this.visibleActions) {
                     this.renderAction(action);
                 }
+            } else {
+                diag.warn(
+                    "PATH",
+                    "Raid timer: auto-detect ran but no usable EFT path is stored in settings",
+                );
             }
         }
     }
 
     private resolveEftPath(settings: RaidTimerSettings | undefined): string {
-        if (settings?.eft_install_path) return settings.eft_install_path;
-        return settingsService.load().eftInstallPath;
+        // Global path is the source of truth; the (possibly stale) action-level
+        // mirror is only a fallback. Result is always normalized.
+        return settingsService.resolvePath(settings?.eft_install_path);
     }
 
     private async ensureWatcher(eftPath: string): Promise<void> {
-        if (!eftPath) return;
+        if (!eftPath) {
+            // The path was cleared: stop watching the previous path instead of
+            // silently keeping it alive, and show the "Set EFT Path" title.
+            if (this.watcherRunning) {
+                raidLogWatcher.stop();
+                this.watcherRunning = false;
+                diag.warn("PATH", "Raid timer: EFT path was cleared - raid log watcher stopped");
+            }
+            this.currentEftPath = "";
+            diag.throttled(
+                "warn",
+                "raidtimer-no-path",
+                "PATH",
+                "Raid timer is active but no EFT path is set - it cannot track raids. Set the path in the property inspector.",
+            );
+            return;
+        }
         this.currentEftPath = eftPath;
-        if (!this.watcherRunning) {
+        // Start (or restart) when the watcher is not running, or when the configured path changed.
+        if (!this.watcherRunning || raidLogWatcher.watchedPath !== eftPath) {
             raidLogWatcher.onStateChange = () => {
                 for (const action of this.visibleActions) {
                     this.renderAction(action);

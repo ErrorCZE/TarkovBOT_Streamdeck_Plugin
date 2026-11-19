@@ -3,6 +3,7 @@ import type { MapData } from "../types";
 import { MapInfoBaseAction } from "./base/map-info-base";
 import { settingsService } from "../services/settings-service";
 import { findServerFromLogs } from "../services/log-service";
+import { diag, describeFsError } from "../services/diagnostics-service";
 import { formatDatacenter } from "../utils/time-format";
 
 @action({ UUID: "eu.tarkovbot.tools.mapinfo.currentserver" })
@@ -14,8 +15,15 @@ export class TarkovCurrentMapInfo_CurrentServer extends MapInfoBaseAction {
         try {
             const info = await findServerFromLogs(settings.eftInstallPath);
             this.lastDatacenter = info?.datacenter ?? null;
-        } catch {
-            // keep last known
+        } catch (err) {
+            // keep last known value, but record what went wrong
+            diag.throttled(
+                "error",
+                "mapserver-lookup",
+                "ACTION",
+                "Server lookup failed - keeping last known value",
+                { err: describeFsError(err) },
+            );
         }
         if (this.lastDatacenter) {
             return `\n\n${formatDatacenter(this.lastDatacenter)}`;
