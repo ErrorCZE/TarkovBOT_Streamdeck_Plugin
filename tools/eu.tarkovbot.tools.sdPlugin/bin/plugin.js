@@ -9321,7 +9321,7 @@ let TarkovTime = (() => {
 
 const DIAG_FILE_PATH = path.join(process.cwd(), "diagnostics.log");
 const DIAG_OLD_FILE_PATH = path.join(process.cwd(), "diagnostics.old.log");
-const MAX_LOG_SIZE = 512 * 1024; // rotate after 512 KB
+const MAX_LOG_SIZE = 1024 * 1024;
 const DEFAULT_THROTTLE_MS = 10 * 60 * 1000; // repeated errors: log again after 10 min
 /** Human-readable explanation for common Node.js filesystem error codes. */
 const FS_ERROR_HINTS = {
@@ -10499,63 +10499,131 @@ let TarkovTraderRestock = (() => {
 })();
 
 const execAsync = promisify(exec);
+const STEAM_APP_ID = "3932890";
 const REGISTRY_PATHS = [
+    "HKLM\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\EscapeFromTarkov",
     "HKLM\\SOFTWARE\\WOW6432Node\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\EscapeFromTarkov",
+    "HKCU\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\EscapeFromTarkov",
+    "HKCU\\SOFTWARE\\WOW6432Node\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\EscapeFromTarkov",
     "HKLM\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\Steam App 3932890",
+    "HKLM\\SOFTWARE\\WOW6432Node\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\Steam App 3932890",
+    "HKCU\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\Steam App 3932890",
+    "HKCU\\SOFTWARE\\WOW6432Node\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\Steam App 3932890",
 ];
-const REG_INSTALL_LOCATION = /InstallLocation\s+REG_SZ\s+(.+)/i;
+const REG_INSTALL_LOCATION = /InstallLocation\s+REG_(?:SZ|EXPAND_SZ)\s+(.+)/i;
+const REG_STEAM_PATH = /(?:SteamPath|InstallPath)\s+REG_SZ\s+(.+)/i;
 async function detectEftPath() {
-    diag.info("PATH", "EFT path auto-detection started (checking registry keys)");
+    diag.info("PATH", "EFT path auto-detection started");
+    const registryPaths = await getRegistryInstallLocations();
+    for (const installPath of registryPaths) {
+        if (isValidEftPath(installPath)) {
+            return { success: true, path: installPath };
+        }
+    }
+    const steamPaths = await getSteamInstallRoots();
+    for (const steamRoot of steamPaths) {
+        const eftPath = await getSteamEftInstallPath(steamRoot);
+        if (eftPath && isValidEftPath(eftPath)) {
+            return { success: true, path: eftPath };
+        }
+    }
+    const error = "EFT installation not found. Please enter the path manually.";
+    diag.warn("PATH", `EFT path auto-detection failed - ${error}`);
+    return { success: false, error };
+}
+async function getRegistryInstallLocations() {
+    const installLocations = new Set();
     for (const regPath of REGISTRY_PATHS) {
-        let stdout;
         try {
             const result = await execAsync(`reg query "${regPath}" /v InstallLocation`, {
                 encoding: "utf8",
             });
-            stdout = result.stdout;
+            const match = result.stdout.match(REG_INSTALL_LOCATION);
+            if (match?.[1]) {
+                installLocations.add(path.normalize(match[1].trim()));
+            }
         }
-        catch (err) {
-            // reg.exe exits non-zero when the key does not exist - normal for one of the two keys.
-            diag.info("PATH", `Registry key not usable (skipping)`, {
-                regPath,
-                reason: err?.code ? `exit code ${err.code}` : describeFsError(err),
-            });
-            continue;
+        catch {
         }
-        const match = stdout.match(REG_INSTALL_LOCATION);
-        if (!match?.[1]) {
-            diag.warn("PATH", "Registry key exists but InstallLocation value is missing or empty", {
-                regPath,
-            });
-            continue;
-        }
-        const installPath = match[1].trim();
-        let logsExists;
-        try {
-            logsExists = fs.existsSync(`${installPath}\\Logs`);
-        }
-        catch (err) {
-            diag.warn("PATH", "Cannot check the detected install path", {
-                installPath,
-                err: describeFsError(err),
-            });
-            continue;
-        }
-        if (logsExists) {
-            diag.info("PATH", "EFT path auto-detected from registry", { installPath });
-            return { success: true, path: installPath };
-        }
-        diag.warn("PATH", "Detected install path has no Logs folder (game never run from here?)", {
-            installPath,
-            checkedPath: `${installPath}\\Logs`,
-        });
     }
-    const error = "EFT installation not found. Please enter the path manually.";
-    diag.warn("PATH", `EFT path auto-detection failed - ${error}`, {
-        triedRegistryKeys: REGISTRY_PATHS.length,
-        hint: "Set the path manually in the property inspector; the problem will be logged with details.",
-    });
-    return { success: false, error };
+    return Array.from(installLocations);
+}
+async function getSteamInstallRoots() {
+    const steamRoots = new Set();
+    const steamRegistryPaths = [
+        "HKCU\\SOFTWARE\\Valve\\Steam",
+        "HKLM\\SOFTWARE\\WOW6432Node\\Valve\\Steam",
+    ];
+    for (const regPath of steamRegistryPaths) {
+        try {
+            const result = await execAsync(`reg query "${regPath}"`, { encoding: "utf8" });
+            const match = result.stdout.match(REG_STEAM_PATH);
+            if (match?.[1]) {
+                const steamPath = path.normalize(match[1].trim().replace(/\\"/g, ""));
+                if (fs.existsSync(steamPath)) {
+                    steamRoots.add(steamPath);
+                }
+            }
+        }
+        catch {
+        }
+    }
+    return Array.from(steamRoots);
+}
+async function getSteamEftInstallPath(steamRoot) {
+    const libraryFoldersPath = path.join(steamRoot, "steamapps", "libraryfolders.vdf");
+    const libraries = new Set([steamRoot]);
+    if (fs.existsSync(libraryFoldersPath)) {
+        try {
+            const vdfContent = fs.readFileSync(libraryFoldersPath, "utf8");
+            const matches = [...vdfContent.matchAll(/"path"\s+"([^"]+)"/g)];
+            for (const match of matches) {
+                const libPath = path.normalize(match[1].replace(/\\\\/g, "\\"));
+                if (fs.existsSync(libPath)) {
+                    libraries.add(libPath);
+                }
+            }
+        }
+        catch (err) {
+            diag.warn("PATH", "Failed to read libraryfolders.vdf", { err: describeFsError(err) });
+        }
+    }
+    for (const libPath of libraries) {
+        const manifestPath = path.join(libPath, "steamapps", `appmanifest_${STEAM_APP_ID}.acf`);
+        if (fs.existsSync(manifestPath)) {
+            try {
+                const acfContent = fs.readFileSync(manifestPath, "utf8");
+                const dirMatch = acfContent.match(/"installdir"\s+"([^"]+)"/);
+                if (dirMatch?.[1]) {
+                    const candidate = path.normalize(path.join(libPath, "steamapps", "common", dirMatch[1]));
+                    if (fs.existsSync(candidate)) {
+                        return candidate;
+                    }
+                }
+            }
+            catch (err) {
+                diag.warn("PATH", "Failed to read appmanifest", { manifestPath, err: describeFsError(err) });
+            }
+        }
+    }
+    return null;
+}
+function isValidEftPath(installPath) {
+    if (!installPath || !fs.existsSync(installPath)) {
+        return false;
+    }
+    const possibleLogPaths = [
+        path.join(installPath, "Logs"),
+        path.join(installPath, "build", "Logs"),
+    ];
+    for (const logPath of possibleLogPaths) {
+        if (fs.existsSync(logPath)) {
+            diag.info("PATH", "EFT path auto-detected successfully", { installPath, logsPath: logPath });
+            return true;
+        }
+    }
+    diag.warn("PATH", "Detected install path has no Logs folder", { installPath });
+    return false;
 }
 
 class SettingsService {
